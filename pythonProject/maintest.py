@@ -198,7 +198,8 @@ y_scale_var = tk.StringVar(value=str(y_scale_values[4]))
 # # Set initial scale
 # update_y_scale(y_scale_values[4])
 
-# Bind resize event to resize_canvas function
+# Bind resize event to resize_canvas functionpyinstaller -
+#
 app.bind("<Configure>", resize_canvas)
 
 # Handle window close event
