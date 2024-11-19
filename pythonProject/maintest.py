@@ -1,15 +1,17 @@
 import tkinter as tk
 from tkinter import messagebox, simpledialog
-import random
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from tkinter.filedialog import asksaveasfilename
 import numpy as np
+import serial.tools.list_ports
+import serial
+import time
+from serial.serialutil import STOPBITS_ONE
 
 # Лист для чисел
 random_numbers = []
 recording = False  # флаг для записи
-
 
 coefficients = [0, 1]  # стандартные значения полинома
 
@@ -31,32 +33,33 @@ def start_recording():
     x_data.clear()
     y1_data.clear()
     y2_data.clear()
-    messagebox.showinfo("Запись", "Начата запись случайных чисел.")
+    messagebox.showinfo("Запись", "Начата запись чисел.")
 
 def stop_recording():
     global recording
     recording = False  # Stop recording
-    messagebox.showinfo("Запись", "Запись случайных чисел остановлена.")
+    messagebox.showinfo("Запись", "Запись чисел остановлена.")
 
 def calculate_temperature(resistance):
-
     return sum(coef * (resistance ** i) for i, coef in enumerate(coefficients))
 
 def update_labels():
     if recording:
-        resistance = random.uniform(0, 1000)
-        temperature = calculate_temperature(resistance)
+        try:
+            data = ser.readline().decode("utf-8").strip()
+            resistance, temperature = map(float, data.split(','))
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка получения данных: {e}")
+            return
 
         label1.config(text=f"Сопротивление: {resistance:.2f}")
         label2.config(text=f"Температура: {temperature:.2f}")
 
         random_numbers.append((resistance, temperature))
 
-
         x_data.append(len(x_data) + 1)
         y1_data.append(resistance)
         y2_data.append(temperature)
-
 
         ax.cla()
         ax.grid(True)
@@ -64,10 +67,8 @@ def update_labels():
         ax.set_xlabel("Секунды")
         ax.set_ylabel("Значения")
 
-
         ax.plot(x_data, y1_data, label='Сопротивление', color='blue', marker='o')
         ax.plot(x_data, y2_data, label='Температура', color='orange', marker='o')
-
 
         for i in range(len(x_data)):
             ax.text(x_data[i], y1_data[i] + 50, f'({x_data[i]}, {y1_data[i]:.2f})',
@@ -85,7 +86,7 @@ def update_labels():
 def resize_canvas(event):
     width = app.winfo_width()
     height = app.winfo_height()
-    canvas .get_tk_widget().config(width=width - 20, height=height - 320)
+    canvas.get_tk_widget().config(width=width - 20, height=height - 320)
 
 def update_y_scale(value):
     scale_value = float(value)
@@ -134,12 +135,51 @@ class DraggableZoomPan:
         self.ax.set_ylim(new_ylim)
         self.ax.figure.canvas.draw()
 
+def list_ports():
+    ports = list(serial.tools.list_ports.comports())
+    port_list.delete(0, tk.END)
+    for port in ports:
+        port_list.insert(tk.END, f'{port.device} - {port.description} - {port.manufacturer}')
+
+def connect_port():
+    global ser
+    selected_port = port_list.get(port_list.curselection())
+    port = selected_port.split(' - ')[0]
+    baudrate = 9600
+    try:
+        ser = serial.Serial(port, baudrate=baudrate, stopbits=STOPBITS_ONE)
+        messagebox.showinfo("Успех", f"Подключено к порту: {port}")
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Не удалось подключиться к порту: {e}")
+
+def send_sign():
+    try:
+        ser.dtr = True
+        ser.rts = False
+        messagebox.showinfo("Успех", 'Команда dtr/rts выполнена')
+    except Exception as e:
+        messagebox.showerror("Ошибка", f'Ошибка выполнения команды dtr/rts: {e}')
+
+def take_sign():
+    try:
+        data = ser.readline().decode("utf-8").strip()
+        messagebox.showinfo("Успех", f'Полученные данные: {data}')
+    except Exception as e:
+        messagebox.showerror("Ошибка", f'Ошибка получения данных: {e}')
+
+def stop_connection():
+    try:
+        ser.dtr = False
+        ser.flush()
+        ser.close()
+        messagebox.showinfo("Успех", 'Соединение закрыто')
+    except Exception as e:
+        messagebox.showerror("Ошибка", f'Ошибка закрытия соединения: {e}')
 
 app = tk.Tk()
 app.title("Теркон")
 app.geometry('1000x800')
 messagebox.showwarning(title="Внимание", message="Программа создана студентами КГУ из ФФМИ, распространение запрещено")
-
 
 fig, ax = plt.subplots(figsize=(4, 3))
 ax.set_ylim(-1000.0000, 1000.9999)
@@ -148,7 +188,6 @@ ax.set_ylabel("Значения")
 
 # Разметка местоположения
 ax.grid(True)  # Enable grid
-
 
 x_data = []
 y1_data = []
@@ -181,25 +220,15 @@ def input_coefficients():
         coefficients = [float(coef) for coef in coeffs.split(',')]
         messagebox.showinfo("Успех", "Коэффициенты обновлены.")
 
-
 coeff_btn = tk.Button(text='Ввести коэффициенты', width=20, height=1, command=input_coefficients)
 coeff_btn.pack(side=tk.LEFT, anchor=tk.N)
-
 
 coefficients = [0, 1]  # Example: y = 0 + 1*x (linear relationship)
 
 #выбор масштаба
 y_scale_values = [0.0001, 0.001, 0.1, 0.5, 2, 10, 50, 200, 1000, 5000, 9999]
 y_scale_var = tk.StringVar(value=str(y_scale_values[4]))
-# scale = tk.Scale(app, from_=0, to=len(y_scale_values) - 1, orient=tk.HORIZONTAL,
-#                  label="Масштаб", length=200, command=lambda val: update_y_scale(y_scale_values[int(val)]))
-# scale.pack(side=tk.RIGHT, anchor=tk.N)
-#
-# # Set initial scale
-# update_y_scale(y_scale_values[4])
 
-# Bind resize event to resize_canvas functionpyinstaller -
-#
 app.bind("<Configure>", resize_canvas)
 
 # Handle window close event
@@ -209,10 +238,27 @@ def on_closing():
 
 app.protocol("WM_DELETE_WINDOW", on_closing)
 
-
 update_labels()
 
-
 draggable_zoom_pan = DraggableZoomPan(ax)
+
+# Добавление элементов для работы с последовательными портами
+port_list = tk.Listbox(app, width=50, height=10)
+port_list.pack(side=tk.RIGHT, anchor=tk.N)
+
+list_ports_btn = tk.Button(text='Список портов', width=20, height=1, command=list_ports)
+list_ports_btn.pack(side=tk.RIGHT, anchor=tk.N)
+
+connect_btn = tk.Button(text='Подключиться', width=20, height=1, command=connect_port)
+connect_btn.pack(side=tk.RIGHT, anchor=tk.N)
+
+send_sign_btn = tk.Button(text='Отправить сигнал', width=20, height=1, command=send_sign)
+send_sign_btn.pack(side=tk.RIGHT, anchor=tk.N)
+
+take_sign_btn = tk.Button(text='Получить сигнал', width=20, height=1, command=take_sign)
+take_sign_btn.pack(side=tk.RIGHT, anchor=tk.N)
+
+stop_connection_btn = tk.Button(text='Остановить', width=20, height=1, command=stop_connection)
+stop_connection_btn.pack(side=tk.RIGHT, anchor=tk.N)
 
 app.mainloop()
