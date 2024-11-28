@@ -1,93 +1,153 @@
-from tkinter import *
-from tkinter import messagebox, ttk
-import serial.tools.list_ports
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
 import serial
-from serial.serialutil import STOPBITS_ONE
+import serial.tools.list_ports
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import threading
+import time
+import datetime
 
-def receive_usb_data(label):
-  ports = list(serial.tools.list_ports.comports())
-  port_found = False
-  for port in ports:
-    if "Arduino" in port.description: # Пример, подставьте свою логику проверки
-      port_found = True
-      port = port.device
-      break
+class RealTimePlotApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("График в реальном времени")
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-  if not port_found:
-    print("Port not found")
-    return
+        self.create_widgets()
+        self.serial_port = None
+        self.data_r1 = []
+        self.data_r2 = []
+        self.times = []
+        self.is_running = False
+        self.plot_r1 = True
+        self.plot_r2 = True
 
-  baudrate = 9600
-  try:
-    ser = serial.Serial(port, baudrate=baudrate, stopbits=STOPBITS_ONE)
-    flag = True
-    while flag:
-      try:
-        data = ser.readline().decode('utf-8', errors='replace').rstrip()
-        if data:
-          print(data)
-          label.config(text=data)
-          app.update() #обновление интерфейса
-      except Exception as e:
-        print(f"Error reading data: {e}")
-        label.config(text=f"Error reading data: {e}")
-        app.update() #обновление интерфейса
+    def create_widgets(self):
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(expand=1, fill="both")
 
-      if app.winfo_exists() == 0: # Проверка на закрытие основного окна
-        flag = False
-        ser.close()
-        break
+        self.main_frame = ttk.Frame(self.notebook)
+        self.graph_frame = ttk.Frame(self.notebook)
 
-  except serial.SerialException as e:
-    print(f'Error of connection: {e}')
-    label.config(text=f'Error of connection: {e}')
-    app.update() #обновление интерфейса
+        self.notebook.add(self.main_frame, text='Главная')
+        self.notebook.add(self.graph_frame, text='График')
 
-def on_button_click():
-  settings_window = Toplevel() # Используем Toplevel для создания дочернего окна
-  settings_window.title("Настройки")
-  label = Label(settings_window, text="Это настройки, но тут пока ничего нет")
-  label.pack()
-  settings_window.resizable(False, False) # Запрещаем изменение размера
+        self.create_main_frame()
+        self.create_graph_frame()
 
+    def create_main_frame(self):
+        self.port_listbox = tk.Listbox(self.main_frame)
+        self.port_listbox.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-app = Tk()
-app.title("Теркон")
-app.geometry('500x600')
+        self.data_text = tk.Text(self.main_frame, wrap=tk.WORD, state=tk.DISABLED)
+        self.data_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-messagebox.showwarning(title="Внимание",
-            message="Программа создана студентами КГУ из ФФМИ, распространение запрещено")
+        self.separator = ttk.Separator(self.main_frame, orient=tk.VERTICAL)
+        self.separator.pack(side=tk.LEFT, fill=tk.Y, padx=5)
 
-# Увеличим кнопки
-main_btn = Button(
-  text='Главная',
-  width=15,
-  height=2
-)
-main_btn.pack(side=TOP, anchor=E)
+        self.control_frame = ttk.Frame(self.main_frame)
+        self.control_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
-sett_btn = Button(
-  text='Настройки',
-  width=15,
-  height=2,
-  command=on_button_click
-)
-sett_btn.pack(side=TOP, anchor=E)
+        self.connect_button = ttk.Button(self.control_frame, text="Подключиться", command=self.connect_selected_port)
+        self.connect_button.pack(side=tk.LEFT, padx=5, pady=5)
 
-stop_btn = Button(
-  text='Стоп',
-  width=15,
-  height=2,
-  command=app.quit
-)
-stop_btn.pack(side=TOP, anchor=E)
+        self.disconnect_button = ttk.Button(self.control_frame, text="Отключиться", command=self.disconnect_port)
+        self.disconnect_button.pack(side=tk.LEFT, padx=5, pady=5)
 
-# Добавление элемента для вывода данных из порта
-output_label = Label(app, text="", anchor="nw", justify="left", wraplength=400)
-output_label.place(x=10, y=10) # Расположение в левом верхнем углу
+        self.save_button = ttk.Button(self.control_frame, text="Сохранить данные", command=self.save_data)
+        self.save_button.pack(side=tk.LEFT, padx=5, pady=5)
 
+        self.update_port_list()
 
-app.after(100, receive_usb_data, output_label) # Запуск функции receive_usb_data
+    def create_graph_frame(self):
+        self.figure, self.ax = plt.subplots()
+        self.canvas = FigureCanvasTkAgg(self.figure, self.graph_frame)
+        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
+        self.graph_control_frame = ttk.Frame(self.graph_frame)
+        self.graph_control_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
-app.mainloop()
+        self.toggle_r1_button = ttk.Button(self.graph_control_frame, text="Переключить R1", command=self.toggle_r1)
+        self.toggle_r1_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.toggle_r2_button = ttk.Button(self.graph_control_frame, text="Переключить R2", command=self.toggle_r2)
+        self.toggle_r2_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+    def update_port_list(self):
+        self.port_listbox.delete(0, tk.END)
+        ports = serial.tools.list_ports.comports()
+        for port in ports:
+            self.port_listbox.insert(tk.END, port.device)
+
+    def connect_selected_port(self):
+        selected_port = self.port_listbox.get(self.port_listbox.curselection())
+        if selected_port:
+            try:
+                self.serial_port = serial.Serial(selected_port, 9600, timeout=1)
+                self.is_running = True
+                threading.Thread(target=self.read_data).start()
+                messagebox.showinfo("Успех", f"Успешно подключено к {selected_port}")
+            except serial.SerialException as e:
+                messagebox.showerror("Ошибка", f"Не удалось открыть порт {selected_port}: {e}")
+
+    def disconnect_port(self):
+        if self.serial_port and self.serial_port.is_open:
+            self.is_running = False
+            self.serial_port.close()
+            self.serial_port = None
+
+    def read_data(self):
+        while self.is_running:
+            try:
+                line = self.serial_port.readline().decode('utf-8').strip()
+                if "R1(" in line and "R2(" in line:
+                    r1_value = float(line.split("R1(")[1].split(")")[0])
+                    r2_value = float(line.split("R2(")[1].split(")")[0])
+                    self.data_r1.append(r1_value)
+                    self.data_r2.append(r2_value)
+                    self.times.append(datetime.datetime.now())
+                    self.update_data_display(r1_value, r2_value)
+                    self.update_graph()
+            except Exception as e:
+                print(f"Ошибка чтения данных: {e}")
+
+    def update_data_display(self, r1_value, r2_value):
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.data_text.config(state=tk.NORMAL)
+        self.data_text.insert(tk.END, f"{current_time} R1({r1_value}) R2({r2_value})\n")
+        self.data_text.see(tk.END)
+        self.data_text.config(state=tk.DISABLED)
+
+    def update_graph(self):
+        self.ax.clear()
+        if self.plot_r1:
+            self.ax.plot(self.times, self.data_r1, label='R1')
+        if self.plot_r2:
+            self.ax.plot(self.times, self.data_r2, label='R2')
+        self.ax.legend()
+        self.canvas.draw()
+
+    def save_data(self):
+        file_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
+        if file_path:
+            with open(file_path, "w") as file:
+                for i in range(len(self.times)):
+                    file.write(f"{self.times[i]} R1({self.data_r1[i]}) R2({self.data_r2[i]})\n")
+
+    def toggle_r1(self):
+        self.plot_r1 = not self.plot_r1
+        self.update_graph()
+
+    def toggle_r2(self):
+        self.plot_r2 = not self.plot_r2
+        self.update_graph()
+
+    def on_closing(self):
+        self.disconnect_port()
+        self.root.destroy()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = RealTimePlotApp(root)
+    root.mainloop()
