@@ -1,3 +1,4 @@
+
 import tkinter as tk
 from tkinter import messagebox, filedialog, BooleanVar, ttk
 import serial
@@ -13,7 +14,7 @@ class TermexApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Преобразователь сигналов ТС и ТП прецизионные ТЕРКОН")
-        self.root.geometry("800x600")
+        self.root.geometry("1000x600") #Increased window size for better plot visibility
         messagebox.showwarning("Внимание", "Программа создана ElMak")
 
         # Создаем вкладки
@@ -80,6 +81,7 @@ class TermexApp:
         self.plot_frame = tk.Frame(self.notebook)
         self.notebook.add(self.plot_frame, text="График")
 
+
         self.serial_port = None
         self.start_time = None
         self.start_time_str = None
@@ -93,69 +95,43 @@ class TermexApp:
         self.data_type = 'R'  # По умолчанию тип данных R
         self.attempts = 0
         self.max_attempts = 3  # Максимальное количество попыток
-
-        # Initialize plot variables
-        self.times_r1 = []
-        self.values_r1 = []
-        self.times_r2 = []
-        self.values_r2 = []
-        self.times_c1 = []
-        self.values_c1 = []
-        self.times_c2 = []
-        self.values_c2 = []
-
         self.open_plot_window()
+        self.plot_type = 'both' #default to show both plots
 
     def update_plot(self):
         """Обновляет график данных в реальном времени."""
-        print("Обновление графика")  # Отладочное сообщение
         if self.data_type == 'R':
-            times_r1 = [self.convert_time_to_seconds(entry[0]) for entry in self.data_r1]
-            print(times_r1)
+            times = [self.convert_time_to_seconds(entry[0]) for entry in self.data_r1]
             values_r1 = [entry[1] for entry in self.data_r1]
-            times_r2 = [self.convert_time_to_seconds(entry[0]) for entry in self.data_r2]
             values_r2 = [entry[1] for entry in self.data_r2]
-            print(f"Данные R1: {times_r1}, {values_r1}")  # Отладочное сообщение
-            print(f"Данные R2: {times_r2}, {values_r2}")  # Отладочное сообщение
-            self.line_r1.set_xdata(times_r1)
-            self.line_r1.set_ydata(values_r1)
-            self.line_r2.set_xdata(times_r2)
-            self.line_r2.set_ydata(values_r2)
+            self.plot_data(times, values_r1, values_r2, 'R1', 'R2')
         elif self.data_type == 'C':
-            times_c1 = [self.convert_time_to_seconds(entry[0]) for entry in self.data_c1]
+            times = [self.convert_time_to_seconds(entry[0]) for entry in self.data_c1]
             values_c1 = [entry[1] for entry in self.data_c1]
-            times_c2 = [self.convert_time_to_seconds(entry[0]) for entry in self.data_c2]
             values_c2 = [entry[1] for entry in self.data_c2]
-            print(f"Данные C1: {times_c1}, {values_c1}")  # Отладочное сообщение
-            print(f"Данные C2: {times_c2}, {values_c2}")  # Отладочное сообщение
-            self.line_c1.set_xdata(times_c1)
-            self.line_c1.set_ydata(values_c1)
-            self.line_c2.set_xdata(times_c2)
-            self.line_c2.set_ydata(values_c2)
+            self.plot_data(times, values_c1, values_c2, 'C1', 'C2')
 
-        # Обновление пределов осей
-        if self.data_type == 'R':
-            if times_r1 and times_r2:
-                self.ax.set_xlim(left=0, right=max(max(times_r1), max(times_r2)))
-                self.ax.set_ylim(bottom=0.00001, top=max(max(values_r1), max(values_r2)))
-            else:
-                self.ax.set_xlim(left=0, right=10)  # Начальные значения для осей
-                self.ax.set_ylim(bottom=0.00001, top=10)
-        elif self.data_type == 'C':
-            if times_c1 and times_c2:
-                self.ax.set_xlim(left=0, right=max(max(times_c1), max(times_c2)))
-                self.ax.set_ylim(bottom=0.00001, top=max(max(values_c1), max(values_c2)))
-            else:
-                self.ax.set_xlim(left=0, right=10)  # Начальные значения для осей
-                self.ax.set_ylim(bottom=0.00001, top=10)
+    def plot_data(self, times, values1, values2, label1, label2):
+        self.ax.clear()
+        self.ax.set_xlabel('Время (секунды)')
+        self.ax.set_ylabel('Значение')
+        self.ax.set_title('График данных')
+        self.ax.grid(True)
 
+        if self.plot_type == 'both' or self.plot_type == label1:
+            self.ax.plot(times, values1, label=label1)
+        if self.plot_type == 'both' or self.plot_type == label2:
+            self.ax.plot(times, values2, label=label2)
+
+        self.ax.legend()
         self.canvas.draw()
+
 
     def update_plot_thread(self):
         """Обновляет график данных в реальном времени в отдельном потоке."""
-        while self.serial_port and self.serial_port.is_open:
+        while self.is_recording and self.serial_port and self.serial_port.is_open:
             self.update_plot()
-            time.sleep(0.1)  # Пауза между обновлениями графика
+            time.sleep(0.1)
 
     def update_port_list(self):
         """Обновляет список доступных COM-портов."""
@@ -173,7 +149,8 @@ class TermexApp:
             self.data_display.insert(tk.END, "Успешно подключено к " + selected_port + "\n")
             self.data_display.config(state='disabled')
             self.start_time = time.time()  # Запоминаем время начала записи
-            self.start_time_str = datetime.datetime.now().strftime("%H:%M:%S.%f")  # Запоминаем время начала записи в строковом формате
+            self.start_time_str = datetime.datetime.now().strftime(
+                "%H:%M:%S.%f")  # Запоминаем время начала записи в строковом формате
             self.read_data_thread = threading.Thread(target=self.read_data)
             self.read_data_thread.daemon = True
             self.read_data_thread.start()
@@ -208,108 +185,51 @@ class TermexApp:
 
     def read_data(self):
         """Читает данные из COM-порта и обновляет отображение данных и график."""
-        while self.serial_port and self.serial_port.is_open:
+        while self.is_recording and self.serial_port and self.serial_port.is_open:
             try:
-                data = self.serial_port.readline().decode('utf-8').strip()
-                current_time = datetime.datetime.now().strftime("%H:%M:%S.%f")  # Текущее время с миллисекундами
-                formatted_data = f"{current_time} - {data}"
-                self.root.after(0, self.update_data_display, formatted_data)
+                line = self.serial_port.readline().decode('utf-8').strip()
+                if line:
+                    current_time = datetime.datetime.now().strftime("%H:%M:%S.%f")
+                    formatted_data = f"{current_time} - {line}"
+                    self.root.after(0, self.update_data_display, formatted_data)
 
-                if self.is_recording and self.file_path:
-                    self.write_to_file(formatted_data)
+                    if self.file_path:
+                        self.write_to_file(formatted_data)
 
-                # Парсинг данных
-                if self.data_type == 'R':
-                    if '1R' not in data and '2R' not in data:
-                        self.attempts += 1
-                        if self.attempts >= self.max_attempts:
-                            messagebox.showerror("Ошибка", "Неверный тип данных. Ожидаются данные типа R.")
-                            self.disconnect_from_device()
-                            self.data_type_var.set(False)
-                            self.data_type = 'C'
-                            return
-                        continue
-                    else:
-                        self.attempts = 0  # Сброс счетчика попыток при успешном получении данных
-
-                    r1_value = None
-                    r2_value = None
-                    r1_index = data.find('1R')
-                    r2_index = data.find('2R')
-
-                    if r1_index != -1:
-                        r1_str = data[r1_index + 2:]  # Берем строку, начиная с символа после '1R'
-                        r1_end_index = r1_str.find(' ') if ' ' in r1_str else len(r1_str)
-                        r1_value_str = r1_str[:r1_end_index]
-                        try:
-                            r1_value = float(r1_value_str)
-                        except ValueError:
-                            messagebox.showerror("Ошибка", f"Ошибка парсинга данных R1: {r1_value_str}")
-
-                    if r2_index != -1:
-                        r2_str = data[r2_index + 2:]  # Берем строку, начиная с символа после '2R'
-                        r2_end_index = r2_str.find(' ') if ' ' in r2_str else len(r2_str)
-                        r2_value_str = r2_str[:r2_end_index]
-                        try:
-                            r2_value = float(r2_value_str)
-                        except ValueError:
-                            messagebox.showerror("Ошибка", f"Ошибка парсинга данных R2: {r2_value_str}")
-
-                    if r1_value is not None:
-                        self.data_r1.append((current_time, r1_value))
-                        print(f"Добавлено значение R1: {current_time}, {r1_value}")  # Отладочное сообщение
-                    if r2_value is not None:
-                        self.data_r2.append((current_time, r2_value))
-                        print(f"Добавлено значение R2: {current_time}, {r2_value}")  # Отладочное сообщение
-
-                elif self.data_type == 'C':
-                    if '1C' not in data and '2C' not in data:
-                        self.attempts += 1
-                        if self.attempts >= self.max_attempts:
-                            messagebox.showerror("Ошибка", "Неверный тип данных. Ожидаются данные типа C.")
-                            self.disconnect_from_device()
-                            self.data_type_var.set(True)
-                            self.data_type = 'R'
-                            return
-                        continue
-                    else:
-                        self.attempts = 0  # Сброс счетчика попыток при успешном получении данных
-
-                    c1_value = None
-                    c2_value = None
-                    c1_index = data.find('1C')
-                    c2_index = data.find('2C')
-
-                    if c1_index != -1:
-                        c1_str = data[c1_index + 2:]  # Берем строку, начиная с символа после '1C'
-                        c1_end_index = c1_str.find(' ') if ' ' in c1_str else len(c1_str)
-                        c1_value_str = c1_str[:c1_end_index]
-                        try:
-                            c1_value = float(c1_value_str)
-                        except ValueError:
-                            messagebox.showerror("Ошибка", f"Ошибка парсинга данных C1: {c1_value_str}")
-
-                    if c2_index != -1:
-                        c2_str = data[c2_index + 2:]  # Берем строку, начиная с символа после '2C'
-                        c2_end_index = c2_str.find(' ') if ' ' in c2_str else len(c2_str)
-                        c2_value_str = c2_str[:c2_end_index]
-                        try:
-                            c2_value = float(c2_value_str)
-                        except ValueError:
-                            messagebox.showerror("Ошибка", f"Ошибка парсинга данных C2: {c2_value_str}")
-
-                    if c1_value is not None:
-                        self.data_c1.append((current_time, c1_value))
-                        print(f"Добавлено значение C1: {current_time}, {c1_value}")  # Отладочное сообщение
-                    if c2_value is not None:
-                        self.data_c2.append((current_time, c2_value))
-                        print(f"Добавлено значение C2: {current_time}, {c2_value}")  # Отладочное сообщение
+                    if self.data_type == 'R':
+                        self.parse_r_data(line, current_time)
+                    elif self.data_type == 'C':
+                        self.parse_c_data(line, current_time)
 
             except serial.SerialException as e:
-                messagebox.showerror("Ошибка", "Ошибка чтения данных: " + str(e))
-            except ValueError as e:
-                messagebox.showerror("Ошибка", "Ошибка парсинга данных: " + str(e))
-            time.sleep(0.1)  # Пауза между чтениями данных
+                messagebox.showerror("Ошибка", f"Ошибка чтения данных: {e}")
+                self.disconnect_from_device()
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Непредвиденная ошибка: {e}")
+                self.disconnect_from_device()
+            time.sleep(0.1)
+
+    def parse_r_data(self, line, current_time):
+        parts = line.split()
+        if len(parts) == 2:
+            try:
+                r1_value = float(parts[0])
+                r2_value = float(parts[1])
+                self.data_r1.append((current_time, r1_value))
+                self.data_r2.append((current_time, r2_value))
+            except ValueError:
+                messagebox.showerror("Ошибка", "Ошибка преобразования данных R.")
+
+    def parse_c_data(self, line, current_time):
+        parts = line.split()
+        if len(parts) == 2:
+            try:
+                c1_value = float(parts[0])
+                c2_value = float(parts[1])
+                self.data_c1.append((current_time, c1_value))
+                self.data_c2.append((current_time, c2_value))
+            except ValueError:
+                messagebox.showerror("Ошибка", "Ошибка преобразования данных C.")
 
     def update_data_display(self, data):
         """Обновляет отображение данных в текстовом поле."""
@@ -349,9 +269,8 @@ class TermexApp:
                         except ValueError:
                             messagebox.showerror("Ошибка", f"Ошибка парсинга данных R2: {r2_value_str}")
 
-                    # Записываем данные в три колонки: время, R1, R2
-                    writer.writerow([current_time, r1_value if r1_value is not None else '',
-                                     r2_value if r2_value is not None else ''])
+                    if r1_value is not None and r2_value is not None:
+                        writer.writerow([current_time, r1_value, r2_value])
 
                 elif self.data_type == 'C':
                     c1_value = None
@@ -377,9 +296,8 @@ class TermexApp:
                         except ValueError:
                             messagebox.showerror("Ошибка", f"Ошибка парсинга данных C2: {c2_value_str}")
 
-                    # Записываем данные в три колонки: время, C1, C2
-                    writer.writerow([current_time, c1_value if c1_value is not None else '',
-                                     c2_value if c2_value is not None else ''])
+                    if c1_value is not None and c2_value is not None:
+                        writer.writerow([current_time, c1_value, c2_value])
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка записи данных в файл: {str(e)}")
 
@@ -409,10 +327,33 @@ class TermexApp:
         self.ax.set_title('График данных')
         self.ax.grid(True)  # Добавление сетки
 
+        plot_frame = tk.Frame(self.plot_frame)
+        plot_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.show_r1_button = tk.Button(plot_frame, text="Показать R1", command=lambda: self.update_plot_type('R1'))
+        self.show_r1_button.pack(side=tk.LEFT, padx=2)
+
+        self.show_r2_button = tk.Button(plot_frame, text="Показать R2", command=lambda: self.update_plot_type('R2'))
+        self.show_r2_button.pack(side=tk.LEFT, padx=2)
+
+        self.show_both_button = tk.Button(plot_frame, text="Показать R1 и R2",
+                                          command=lambda: self.update_plot_type('both'))
+        self.show_both_button.pack(side=tk.LEFT, padx=2)
+
         if self.data_type == 'R':
+            self.times_r1 = []
+            self.values_r1 = []
+            self.times_r2 = []
+            self.values_r2 = []
+
             self.line_r1, = self.ax.plot(self.times_r1, self.values_r1, label='R1')
             self.line_r2, = self.ax.plot(self.times_r2, self.values_r2, label='R2')
         elif self.data_type == 'C':
+            self.times_c1 = []
+            self.values_c1 = []
+            self.times_c2 = []
+            self.values_c2 = []
+
             self.line_c1, = self.ax.plot(self.times_c1, self.values_c1, label='C1')
             self.line_c2, = self.ax.plot(self.times_c2, self.values_c2, label='C2')
 
@@ -430,58 +371,29 @@ class TermexApp:
         self.ax.set_xlim(left=0)
 
     def update_plot_type(self, plot_type):
-        """Обновляет тип отображаемого графика."""
-        self.ax.clear()
-        self.ax.set_xlabel('Время (секунды)')
-        self.ax.set_ylabel('Значение')
-        self.ax.set_title('График данных')
-        self.ax.grid(True)
-
-        if self.data_type == 'R':
-            if plot_type == 'R1':
-                self.ax.plot(self.times_r1, self.values_r1, label='R1')
-            elif plot_type == 'R2':
-                self.ax.plot(self.times_r2, self.values_r2, label='R2')
-            elif plot_type == 'both':
-                self.ax.plot(self.times_r1, self.values_r1, label='R1')
-                self.ax.plot(self.times_r2, self.values_r2, label='R2')
-        elif self.data_type == 'C':
-            if plot_type == 'R1':
-                self.ax.plot(self.times_c1, self.values_c1, label='C1')
-            elif plot_type == 'R2':
-                self.ax.plot(self.times_c2, self.values_c2, label='C2')
-            elif plot_type == 'both':
-                self.ax.plot(self.times_c1, self.values_c1, label='C1')
-                self.ax.plot(self.times_c2, self.values_c2, label='C2')
-
-        self.ax.legend()
-        self.canvas.draw()
+        self.plot_type = plot_type
+        self.update_plot()
 
     def convert_time_to_seconds(self, time_str):
-        """Преобразует строку времени в секунды от начала записи."""
         time_format = "%H:%M:%S.%f"
         time_obj = datetime.datetime.strptime(time_str, time_format)
-        print(time_obj)
         start_time_obj = datetime.datetime.strptime(self.start_time_str, time_format)
         delta = time_obj - start_time_obj
-        print(delta)
         return delta.total_seconds()
 
     def close_app(self):
-        """Закрывает приложение, закрывая все потоки и порты."""
+        self.is_recording = False #Stop recording before closing
         if self.serial_port and self.serial_port.is_open:
             self.serial_port.close()
         if self.read_data_thread and self.read_data_thread.is_alive():
             self.read_data_thread.join(timeout=1)
+        if self.update_plot_thread and self.update_plot_thread.is_alive():
+            self.update_plot_thread.join(timeout=1)
         self.root.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = TermexApp(root)
-
-    def on_closing():
-        if messagebox.askokcancel("Выход", "Закрыть программу?"):
-            app.close_app()
-
-    root.protocol("WM_DELETE_WINDOW", on_closing)
+    root.protocol("WM_DELETE_WINDOW", app.close_app) #Use app.close_app directly
     root.mainloop()
+
