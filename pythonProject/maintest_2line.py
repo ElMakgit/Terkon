@@ -111,7 +111,6 @@ class TermexApp:
         print("Обновление графика")  # Отладочное сообщение
         if self.data_type == 'R':
             times_r1 = [self.convert_time_to_seconds(entry[0]) for entry in self.data_r1]
-            print(times_r1)
             values_r1 = [entry[1] for entry in self.data_r1]
             times_r2 = [self.convert_time_to_seconds(entry[0]) for entry in self.data_r2]
             values_r2 = [entry[1] for entry in self.data_r2]
@@ -203,7 +202,7 @@ class TermexApp:
         if self.data_type_var.get():
             self.data_type = 'R'
         else:
-            self.data_type = 't'
+            self.data_type = 'C'
         self.attempts = 0  # Сброс счетчика попыток при смене типа данных
 
     def read_data(self):
@@ -214,36 +213,28 @@ class TermexApp:
         """Читает данные из COM-порта и обновляет отображение данных и график."""
         while self.serial_port and self.serial_port.is_open:
             try:
-                data = self.serial_port.readline().decode('utf-8').strip()
-                print("Это чтение с порта: ", data)
+                data1 = self.serial_port.readline().decode('utf-8').strip()
+                data2 = self.serial_port.readline().decode('utf-8').strip()
+                print("Это чтение с порта: ", data1, data2)
                 current_time = datetime.datetime.now().strftime("%H:%M:%S.%f")  # Текущее время с миллисекундами
-                formatted_data = f"{current_time} - {data}"
-                self.root.after(0, self.update_data_display, formatted_data)
+                formatted_data1 = f"{current_time} - {data1}"
+                formatted_data2 = f"{current_time} - {data2}"
+                self.root.after(0, self.update_data_display, formatted_data1)
+                self.root.after(0, self.update_data_display, formatted_data2)
 
                 if self.is_recording and self.file_path:
-                    self.write_to_file(formatted_data)
+                    self.write_to_file(formatted_data1)
+                    self.write_to_file(formatted_data2)
 
                 # Парсинг данных
                 if self.data_type == 'R':
-                    if '1R' not in data and '2R' not in data:
-                        self.attempts += 1
-                        if self.attempts >= self.max_attempts:
-                            messagebox.showerror("Ошибка", "Неверный тип данных. Ожидаются данные типа R.")
-                            self.disconnect_from_device()
-                            self.data_type_var.set(False)
-                            self.data_type = 't'
-                            return
-                        continue
-                    else:
-                        self.attempts = 0  # Сброс счетчика попыток при успешном получении данных
-
                     r1_value = None
                     r2_value = None
-                    r1_index = data.find('1R')
-                    r2_index = data.find('2R')
+                    r1_index = data1.find('1R')
+                    r2_index = data2.find('2R')
 
                     if r1_index != -1:
-                        r1_str = data[r1_index + 2:]  # Берем строку, начиная с символа после '1R'
+                        r1_str = data1[r1_index + 2:]  # Берем строку, начиная с символа после '1R'
                         r1_end_index = r1_str.find(' ') if ' ' in r1_str else len(r1_str)
                         r1_value_str = r1_str[:r1_end_index]
                         try:
@@ -252,7 +243,7 @@ class TermexApp:
                             messagebox.showerror("Ошибка", f"Ошибка парсинга данных R1: {r1_value_str}")
 
                     if r2_index != -1:
-                        r2_str = data[r2_index + 2:]  # Берем строку, начиная с символа после '2R'
+                        r2_str = data2[r2_index + 2:]  # Берем строку, начиная с символа после '2R'
                         r2_end_index = r2_str.find(' ') if ' ' in r2_str else len(r2_str)
                         r2_value_str = r2_str[:r2_end_index]
                         try:
@@ -267,36 +258,23 @@ class TermexApp:
                         self.data_r2.append((current_time, r2_value))
                         print(f"Добавлено значение R2: {current_time}, {r2_value}")  # Отладочное сообщение
 
-                elif self.data_type == 't':
-                    data = self.serial_port.readline().decode('utf-8').strip()
-                    if '1t' not in data and '2t' not in data:
-                        self.attempts += 1
-                        if self.attempts >= self.max_attempts:
-                            messagebox.showerror("Ошибка", "Неверный тип данных. Ожидаются данные типа t.")
-                            self.disconnect_from_device()
-                            self.data_type_var.set(True)
-                            self.data_type = 'R'
-                            return
-                        continue
-                    else:
-                        self.attempts = 0  # Сброс счетчика попыток при успешном получении данных
-
+                elif self.data_type == 'C':
                     c1_value = None
                     c2_value = None
-                    c1_index = data.find('1t')
-                    c2_index = data.find('2t')
+                    c1_index = data1.find('1C')
+                    c2_index = data2.find('2C')
 
                     if c1_index != -1:
-                        c1_str = data[c1_index + 2:]  # Берем строку, начиная с символа после '1C'
+                        c1_str = data1[c1_index + 2:]  # Берем строку, начиная с символа после '1C'
                         c1_end_index = c1_str.find(' ') if ' ' in c1_str else len(c1_str)
                         c1_value_str = c1_str[:c1_end_index]
                         try:
                             c1_value = float(c1_value_str)
                         except ValueError:
-                            messagebox.showerror("Ошибка", f"Ошибка парсинга данных 1t: {c1_value_str}")
+                            messagebox.showerror("Ошибка", f"Ошибка парсинга данных C1: {c1_value_str}")
 
                     if c2_index != -1:
-                        c2_str = data[c2_index + 2:]  # Берем строку, начиная с символа после '2t'
+                        c2_str = data2[c2_index + 2:]  # Берем строку, начиная с символа после '2C'
                         c2_end_index = c2_str.find(' ') if ' ' in c2_str else len(c2_str)
                         c2_value_str = c2_str[:c2_end_index]
                         try:
@@ -359,11 +337,11 @@ class TermexApp:
                     writer.writerow([current_time, r1_value if r1_value is not None else '',
                                      r2_value if r2_value is not None else ''])
 
-                elif self.data_type == 't':
+                elif self.data_type == 'C':
                     c1_value = None
                     c2_value = None
-                    c1_index = data.find('1t')
-                    c2_index = data.find('2t')
+                    c1_index = data.find('1C')
+                    c2_index = data.find('2C')
 
                     if c1_index != -1:
                         c1_str = data[c1_index + 2:]  # Берем строку, начиная с символа после '1C'
@@ -416,11 +394,11 @@ class TermexApp:
         self.ax.grid(True)  # Добавление сетки
 
         if self.data_type == 'R':
-            self.line_r1, = self.ax.plot(self.times_r1, self.values_r1, label='R1')
-            self.line_r2, = self.ax.plot(self.times_r2, self.values_r2, label='R2')
+            self.line_r1, = self.ax.plot([], [], label='R1')
+            self.line_r2, = self.ax.plot([], [], label='R2')
         elif self.data_type == 'C':
-            self.line_c1, = self.ax.plot(self.times_c1, self.values_c1, label='C1')
-            self.line_c2, = self.ax.plot(self.times_c2, self.values_c2, label='C2')
+            self.line_c1, = self.ax.plot([], [], label='C1')
+            self.line_c2, = self.ax.plot([], [], label='C2')
 
         self.ax.legend()
 
