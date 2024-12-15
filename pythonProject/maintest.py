@@ -6,45 +6,53 @@ import time
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import threading
-import csv
+import openpyxl
+from openpyxl import Workbook
+import sys
+import os
 
 class TermexApp:
     def __init__(self, root):
         self.root = root
         self.root.title("ТЕРКОН")
         self.root.geometry("1300x800")
-        # messagebox.showwarning("Внимание", "Программа создана ElMak")
 
         # меняем размер шрифта
-        self.font_size = 14
+        self.font_size = 16
 
+
+        self.wb = Workbook()
+        self.ws = self.wb.active
+        self.ws.append(["TIME", "R1", "R2"])  # Заголовки столбцов
         # Создаем вкладки
+
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
 
         # Главный экран
-        self.main_frame = tk.Frame(self.notebook)
+        self.main_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.main_frame, text="Главный экран")
 
         # Создаем панель для разделения окон
-        self.paned_window = tk.PanedWindow(self.main_frame, orient=tk.HORIZONTAL, sashrelief=tk.RAISED, sashwidth=15)
+        self.paned_window = ttk.PanedWindow(self.main_frame, orient=tk.HORIZONTAL, )
         self.paned_window.pack(fill=tk.BOTH, expand=True)
 
-        # Левая панель для данных
-        self.data_frame = tk.Frame(self.paned_window)
-        self.paned_window.add(self.data_frame, minsize=500)  # Меняем минимальный размер
 
-        self.data_label = tk.Label(self.data_frame, text="Данные:", font=("Helvetica", self.font_size))
+        # Левая панель для данных
+        self.data_frame = ttk.Frame(self.paned_window)
+        self.paned_window.add(self.data_frame, weight=400)
+
+        self.data_label = ttk.Label(self.data_frame, text="Данные:", font=("Helvetica", self.font_size))
         self.data_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
 
         self.data_display = tk.Text(self.data_frame, state='disabled', height=15, width=80, font=("Helvetica", self.font_size))
         self.data_display.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Правая панель для портов
-        self.port_frame = tk.Frame(self.paned_window)
-        self.paned_window.add(self.port_frame, minsize=150)  # Меняем минимальный размер
+        self.port_frame = ttk.Frame(self.paned_window)
+        self.paned_window.add(self.port_frame, weight=150 )
 
-        self.port_label = tk.Label(self.port_frame, text="COM-порт:", font=("Helvetica", self.font_size))
+        self.port_label = ttk.Label(self.port_frame, text="COM-порт:", font=("Helvetica", self.font_size))
         self.port_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
 
         self.port_listbox = tk.Listbox(self.port_frame, width=30, height=15, font=("Helvetica", self.font_size))
@@ -52,26 +60,26 @@ class TermexApp:
         self.port_listbox.bind('<Double-1>', self.connect_to_device)
 
         # Создаем фрейм для кнопок
-        self.button_frame = tk.Frame(self.main_frame)
+        self.button_frame = ttk.Frame(self.main_frame)
         self.button_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
 
-        self.save_button = tk.Button(self.button_frame, text="Выбрать файл для сохранения", command=self.choose_file, font=("Helvetica", self.font_size))
+        self.save_button = ttk.Button(self.button_frame, text="Выбрать файл для сохранения", command=self.choose_file, style="TButton")
         self.save_button.pack(side=tk.LEFT, padx=5)
 
-        self.start_record_button = tk.Button(self.button_frame, text="Начать запись", command=self.start_recording, font=("Helvetica", self.font_size))
+        self.start_record_button = ttk.Button(self.button_frame, text="Начать запись", command=self.start_recording, style="TButton")
         self.start_record_button.pack(side=tk.LEFT, padx=5)
 
-        self.stop_record_button = tk.Button(self.button_frame, text="Закончить запись", command=self.stop_recording, font=("Helvetica", self.font_size))
+        self.stop_record_button = ttk.Button(self.button_frame, text="Закончить запись", command=self.stop_recording, style="TButton")
         self.stop_record_button.pack(side=tk.LEFT, padx=5)
 
-        self.disconnect_button = tk.Button(self.button_frame, text="Отключиться от порта", command=self.disconnect_from_device, font=("Helvetica", self.font_size))
+        self.disconnect_button = ttk.Button(self.button_frame, text="Отключиться от порта", command=self.disconnect_from_device, style="TButton")
         self.disconnect_button.pack(side=tk.LEFT, padx=5)
 
-        self.update_port_button = tk.Button(self.button_frame, text="Обновить порты", command=self.update_port_list, font=("Helvetica", self.font_size))
+        self.update_port_button = ttk.Button(self.button_frame, text="Обновить порты", command=self.update_port_list, style="TButton")
         self.update_port_button.pack(side=tk.LEFT, padx=5)
 
         # Вкладка для графика
-        self.plot_frame = tk.Frame(self.notebook)
+        self.plot_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.plot_frame, text="График")
 
         self.serial_port = None
@@ -81,6 +89,7 @@ class TermexApp:
         self.data_r2 = []
         self.is_recording = False
         self.read_data_thread = None
+        self.update_plot_thread = None  # Сохраняем ссылку на поток
         self.attempts = 0
         self.max_attempts = 3  # Максимальное количество попыток
 
@@ -94,56 +103,71 @@ class TermexApp:
         self.show_r1 = BooleanVar(value=True)
         self.show_r2 = BooleanVar(value=True)
 
-        self.r1_checkbox = tk.Checkbutton(self.plot_frame, text="Показать 1R", variable=self.show_r1, command=self.update_plot, font=("Helvetica", self.font_size))
+        self.r1_checkbox = ttk.Checkbutton(self.plot_frame, text="Показать 1R", variable=self.show_r1, command=self.update_plot, style="TCheckbutton")
         self.r1_checkbox.pack(anchor="se")
 
-        self.r2_checkbox = tk.Checkbutton(self.plot_frame, text="Показать 2R", variable=self.show_r2, command=self.update_plot, font=("Helvetica", self.font_size))
+        self.r2_checkbox = ttk.Checkbutton(self.plot_frame, text="Показать 2R", variable=self.show_r2, command=self.update_plot, style="TCheckbutton")
         self.r2_checkbox.pack(anchor="se")
 
         self.open_plot_window()
 
         # Вкладка для настроек
-        self.setting_frame = tk.Frame(self.notebook)
+        self.setting_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.setting_frame, text="Настройки")
 
         # Параметры для 1R
-        self.a1_label = tk.Label(self.setting_frame, text="a (1R):", font=("Helvetica", self.font_size))
+        self.a1_label = ttk.Label(self.setting_frame, text="a (1R):", font=("Helvetica", self.font_size))
         self.a1_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
-        self.a1_entry = tk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
-        self.a1_entry.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+        self.a1_entry = ttk.Entry(self.setting_frame, font=("Helvetica", self.font_size), width=10)
+        self.a1_entry.pack(side=tk.TOP, anchor='w', padx=10)
+        self.a1_entry.insert(0, "3.96868e-3")  # Значение по умолчанию
+        self.a1_entry.bind("<FocusOut>", self.check_developer_code)
+        self.a1_entry.bind("<KeyRelease>", self.adjust_entry_width)
 
-        self.b1_label = tk.Label(self.setting_frame, text="b (1R):", font=("Helvetica", self.font_size))
+        self.b1_label = ttk.Label(self.setting_frame, text="b (1R):", font=("Helvetica", self.font_size))
         self.b1_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
-        self.b1_entry = tk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
-        self.b1_entry.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+        self.b1_entry = ttk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
+        self.b1_entry.pack(side=tk.TOP, anchor='w', padx=10)
+        self.b1_entry.insert(0, "-5.802e-7")  # Значение по умолчанию
+        self.b1_entry.bind("<KeyRelease>", self.adjust_entry_width)
 
-        self.scale1_label = tk.Label(self.setting_frame, text="scale1 (1R):", font=("Helvetica", self.font_size))
+        self.scale1_label = ttk.Label(self.setting_frame, text="scale1 (1R):", font=("Helvetica", self.font_size))
         self.scale1_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
-        self.scale1_entry = tk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
-        self.scale1_entry.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+        self.scale1_entry = ttk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
+        self.scale1_entry.pack(side=tk.TOP, anchor='w', padx=10)
+        self.scale1_entry.insert(0, "1000")  # Значение по умолчанию
+        self.scale1_entry.bind("<KeyRelease>", self.adjust_entry_width)
 
         # Параметры для 2R
-        self.a2_label = tk.Label(self.setting_frame, text="a (2R):", font=("Helvetica", self.font_size))
+        self.a2_label = ttk.Label(self.setting_frame, text="a (2R):", font=("Helvetica", self.font_size))
         self.a2_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
-        self.a2_entry = tk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
-        self.a2_entry.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+        self.a2_entry = ttk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
+        self.a2_entry.pack(side=tk.TOP, anchor='w', padx=10)
+        self.a2_entry.insert(0, "3.96868e-3")  # Значение по умолчанию
+        self.a2_entry.bind("<KeyRelease>", self.adjust_entry_width)
 
-        self.b2_label = tk.Label(self.setting_frame, text="b (2R):", font=("Helvetica", self.font_size))
+        self.b2_label = ttk.Label(self.setting_frame, text="b (2R):", font=("Helvetica", self.font_size))
         self.b2_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
-        self.b2_entry = tk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
-        self.b2_entry.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+        self.b2_entry = ttk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
+        self.b2_entry.pack(side=tk.TOP, anchor='w', padx=10)
+        self.b2_entry.insert(0, "-5.802e-7")  # Значение по умолчанию
+        self.b2_entry.bind("<KeyRelease>", self.adjust_entry_width)
 
-        self.scale2_label = tk.Label(self.setting_frame, text="scale2 (2R):", font=("Helvetica", self.font_size))
+        self.scale2_label = ttk.Label(self.setting_frame, text="scale2 (2R):", font=("Helvetica", self.font_size))
         self.scale2_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
-        self.scale2_entry = tk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
-        self.scale2_entry.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+        self.scale2_entry = ttk.Entry(self.setting_frame, font=("Helvetica", self.font_size))
+        self.scale2_entry.pack(side=tk.TOP, anchor='w', padx=10)
+        self.scale2_entry.insert(0, "1000")  # Значение по умолчанию
+        self.scale2_entry.bind("<KeyRelease>", self.adjust_entry_width)
 
-        self.save_settings_button = tk.Button(self.setting_frame, text="Сохранить значения", command=self.save_settings, font=("Helvetica", self.font_size))
-        self.save_settings_button.pack(side=tk.TOP, padx=10, pady=10)
+        self.save_settings_button = ttk.Button(self.setting_frame, text="Сохранить значения", command=self.save_settings, style="TButton")
+        self.save_settings_button.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
+
+        self.reset_settings_button = ttk.Button(self.setting_frame, text="Вернуть настройки по умолчанию", command=self.reset_settings, style="TButton")
+        self.reset_settings_button.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
 
         # Инициализация параметров
         self.a1 = 3.96868e-3
-        print(self.a1)
         self.b1 = -5.802e-7
         self.scale1 = 1000
         self.a2 = 3.96868e-3
@@ -151,44 +175,74 @@ class TermexApp:
         self.scale2 = 1000
 
         # Строка для отображения значений t1 и t2
-        self.temperature_label = tk.Label(self.main_frame, text="T1: 0.00, T2: 0.00", font=("Helvetica", self.font_size))
+        self.temperature_label = ttk.Label(self.main_frame, text="T1: 0.00, T2: 0.00", font=("Helvetica", self.font_size))
         self.temperature_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
 
-    def update_plot(self):
-        """Обновляет график данных в реальном времени."""
-        print("Обновление графика")  # Отладочное сообщение
-        times_r1 = [entry[0] for entry in self.data_r1]
-        values_r1 = [entry[1] for entry in self.data_r1]
-        times_r2 = [entry[0] for entry in self.data_r2]
-        values_r2 = [entry[1] for entry in self.data_r2]
-        print(f"Данные R1: {times_r1}, {values_r1}")  # Отладочное сообщение
-        print(f"Данные R2: {times_r2}, {values_r2}")  # Отладочное сообщение
+        # Флаг для темной темы
+        self.dark_mode = BooleanVar(value=False)
 
-        if self.show_r1.get():
-            self.line_r1.set_xdata(times_r1)
-            self.line_r1.set_ydata(values_r1)
+        # Стили для темной темы
+        self.style = ttk.Style()
+        self.style.theme_use("default")
+
+    def adjust_entry_width(self, event):
+        """Изменяет ширину поля ввода в зависимости от длины введенного текста."""
+        entry = event.widget
+        text_length = len(entry.get())
+        entry.config(width=text_length + 2)  # Добавляем 2 для компенсации границ
+
+    def check_developer_code(self, event):
+        """Проверяет ввод специального кода для активации настроек разработчика."""
+        if self.a1_entry.get() == "HELLO_WORLD":
+            self.show_developer_settings()
+
+    def show_developer_settings(self):
+        """Отображает настройки разработчика."""
+        if not hasattr(self, 'developer_frame'):
+            self.developer_frame = ttk.Frame(self.notebook)
+            self.notebook.add(self.developer_frame, text="Настройки разработчика")
+
+            self.dark_mode_checkbox = ttk.Checkbutton(self.developer_frame, text="Включить темную тему", variable=self.dark_mode, command=self.toggle_dark_mode, style="TCheckbutton")
+            self.dark_mode_checkbox.pack(anchor="w", padx=10, pady=10)
+
+            self.console_label = ttk.Label(self.developer_frame, text="Консоль:", font=("Helvetica", self.font_size))
+            self.console_label.pack(anchor="w", padx=10, pady=10)
+
+            self.console_output = tk.Text(self.developer_frame, state='disabled', height=10, width=80, font=("Helvetica", self.font_size))
+            self.console_output.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+            # Перенаправление stdout для вывода в консоль
+            sys.stdout = self.ConsoleRedirector(self.console_output)
+
+    def toggle_dark_mode(self):
+        """Переключает темную тему."""
+        if self.dark_mode.get():
+            self.style.theme_use("clam")  # Используем темную тему
+            self.style.configure("TNotebook", background="black")
+            self.style.configure("TFrame", background="black")
+            self.style.configure("TLabel", background="black", foreground="white")
+            self.style.configure("TButton", background="black", foreground="white")
+            self.style.configure("TCheckbutton", background="black", foreground="white")
+            self.style.configure("TEntry", fieldbackground="black", foreground="white")
+            self.style.configure("TListbox", fieldbackground="black", foreground="white")
+            self.style.configure("TText", fieldbackground="black", foreground="white")
+            self.data_display.config(bg="black", fg="white")
+            self.port_listbox.config(bg="black", fg="white")
+            self.console_output.config(bg="black", fg="white")
         else:
-            self.line_r1.set_xdata([])
-            self.line_r1.set_ydata([])
+            self.style.theme_use("default")  # Возвращаемся к светлой теме
+            self.style.configure("TNotebook", background="SystemButtonFace")
+            self.style.configure("TFrame", background="SystemButtonFace")
+            self.style.configure("TLabel", background="SystemButtonFace", foreground="black")
+            self.style.configure("TButton", background="SystemButtonFace", foreground="black")
+            self.style.configure("TCheckbutton", background="SystemButtonFace", foreground="black")
+            self.style.configure("TEntry", fieldbackground="white", foreground="black")
+            self.style.configure("TListbox", fieldbackground="white", foreground="black")
+            self.style.configure("TText", fieldbackground="white", foreground="black")
+            self.data_display.config(bg="white", fg="black")
+            self.port_listbox.config(bg="white", fg="black")
+            self.console_output.config(bg="white", fg="black")
 
-        if self.show_r2.get():
-            self.line_r2.set_xdata(times_r2)
-            self.line_r2.set_ydata(values_r2)
-        else:
-            self.line_r2.set_xdata([])
-            self.line_r2.set_ydata([])
-
-        # Обновление пределов осей
-        if times_r1 and times_r2:
-            max_time = max(max(times_r1), max(times_r2))
-            max_value = max(max(values_r1), max(values_r2))
-            self.ax.set_xlim(left=0, right=max_time + 20)  # Увеличиваем масштаб в два раза
-            self.ax.set_ylim(bottom=0.00001, top=max_value + 200)  # Увеличиваем масштаб в два раза
-        else:
-            self.ax.set_xlim(left=0, right=20)  # Начальные значения для осей
-            self.ax.set_ylim(bottom=0.00001, top=20)
-
-        self.canvas.draw()
 
     def update_plot_thread(self):
         """Обновляет график данных в реальном времени в отдельном потоке."""
@@ -244,7 +298,7 @@ class TermexApp:
         """Читает данные из COM-порта и обновляет отображение данных и график."""
         while self.serial_port and self.serial_port.is_open:
             try:
-                data = self.serial_port.read(14).decode('utf-8').strip()
+                data = self.serial_port.readline().decode('utf-8').strip()
                 print("Это чтение с порта: ", data)
                 current_time = time.time() - self.start_time  # Текущее время с начала записи
                 formatted_data = f"{current_time:.2f} - {data}"
@@ -288,22 +342,63 @@ class TermexApp:
                         messagebox.showerror("Ошибка", f"Ошибка парсинга данных R2: {r2_value_str}")
 
                 if r1_value is not None:
+                    self.data_r1.append((current_time, r1_value))
+                    print(f"Добавлено значение R1: {current_time}, {r1_value}")
                     temperature_r1 = self.calculate_temperature(r1_value, self.a1, self.b1, self.scale1)
-                    self.data_r1.append((current_time, temperature_r1))
-                    print(f"Добавлено значение R1: {current_time}, {temperature_r1}")  # Отладочное сообщение
                     self.update_temperature_label(temperature_r1, None)
 
                 if r2_value is not None:
+                    self.data_r2.append((current_time, r2_value))
+                    print(f"Добавлено значение R2: {current_time}, {r2_value}")
                     temperature_r2 = self.calculate_temperature(r2_value, self.a2, self.b2, self.scale2)
-                    self.data_r2.append((current_time, temperature_r2))
-                    print(f"Добавлено значение R2: {current_time}, {temperature_r2}")  # Отладочное сообщение
                     self.update_temperature_label(None, temperature_r2)
+
+                # Обновление графика после добавления новых данных
+                self.update_plot()
 
             except serial.SerialException as e:
                 messagebox.showerror("Ошибка", "Ошибка чтения данных: " + str(e))
+                exit()
             except ValueError as e:
                 messagebox.showerror("Ошибка", "Ошибка парсинга данных: " + str(e))
+                exit()
             time.sleep(0.1)  # Пауза между чтениями данных
+
+    def update_plot(self):
+        """Обновляет график данных в реальном времени."""
+        print("Обновление графика")  # Отладочное сообщение
+        times_r1 = [entry[0] for entry in self.data_r1]
+        values_r1 = [entry[1] for entry in self.data_r1]
+        times_r2 = [entry[0] for entry in self.data_r2]
+        values_r2 = [entry[1] for entry in self.data_r2]
+        print(f"Данные R1: {times_r1}, {values_r1}")  # Отладочное сообщение
+        print(f"Данные R2: {times_r2}, {values_r2}")  # Отладочное сообщение
+
+        if self.show_r1.get():
+            self.line_r1.set_xdata(times_r1)
+            self.line_r1.set_ydata(values_r1)
+        else:
+            self.line_r1.set_xdata([])
+            self.line_r1.set_ydata([])
+
+        if self.show_r2.get():
+            self.line_r2.set_xdata(times_r2)
+            self.line_r2.set_ydata(values_r2)
+        else:
+            self.line_r2.set_xdata([])
+            self.line_r2.set_ydata([])
+
+        # Обновление пределов осей
+        if times_r1 and times_r2:
+            max_time = max(max(times_r1), max(times_r2))
+            max_value = max(max(values_r1), max(values_r2))
+            self.ax.set_xlim(left=0, right=max_time + 20)  # Увеличиваем масштаб в два раза
+            self.ax.set_ylim(bottom=0.00001, top=max_value + 200)  # Увеличиваем масштаб в два раза
+        else:
+            self.ax.set_xlim(left=0, right=20)  # Начальные значения для осей
+            self.ax.set_ylim(bottom=0.00001, top=20)
+
+        self.canvas.draw()
 
     def update_data_display(self, data):
         """Обновляет отображение данных в текстовом поле."""
@@ -313,44 +408,42 @@ class TermexApp:
         self.data_display.see(tk.END)
 
     def write_to_file(self, data):
-        """Записывает данные в CSV файл."""
+        """Записывает данные в Excel файл."""
         try:
-            with open(self.file_path, "a", newline='') as file:
-                writer = csv.writer(file, delimiter=',')
-                current_time = time.time() - self.start_time  # Текущее время с начала записи
+            current_time = time.time() - self.start_time  # Текущее время с начала записи
 
-                r1_value = None
-                r2_value = None
-                r1_index = data.find('1R')
-                r2_index = data.find('2R')
+            r1_value = None
+            r2_value = None
+            r1_index = data.find('1R')
+            r2_index = data.find('2R')
 
-                if r1_index != -1:
-                    r1_str = data[r1_index + 2:]  # Берем строку, начиная с символа после '1R'
-                    r1_end_index = r1_str.find(' ') if ' ' in r1_str else len(r1_str)
-                    r1_value_str = r1_str[:r1_end_index]
-                    try:
-                        r1_value = float(r1_value_str)
-                    except ValueError:
-                        messagebox.showerror("Ошибка", f"Ошибка парсинга данных R1: {r1_value_str}")
+            if r1_index != -1:
+                r1_str = data[r1_index + 2:]  # Берем строку, начиная с символа после '1R'
+                r1_end_index = r1_str.find(' ') if ' ' in r1_str else len(r1_str)
+                r1_value_str = r1_str[:r1_end_index]
+                try:
+                    r1_value = float(r1_value_str)
+                except ValueError:
+                    messagebox.showerror("Ошибка", f"Ошибка парсинга данных R1: {r1_value_str}")
 
-                if r2_index != -1:
-                    r2_str = data[r2_index + 2:]  # Берем строку, начиная с символа после '2R'
-                    r2_end_index = r2_str.find(' ') if ' ' in r2_str else len(r2_str)
-                    r2_value_str = r2_str[:r2_end_index]
-                    try:
-                        r2_value = float(r2_value_str)
-                    except ValueError:
-                        messagebox.showerror("Ошибка", f"Ошибка парсинга данных R2: {r2_value_str}")
+            if r2_index != -1:
+                r2_str = data[r2_index + 2:]  # Берем строку, начиная с символа после '2R'
+                r2_end_index = r2_str.find(' ') if ' ' in r2_str else len(r2_str)
+                r2_value_str = r2_str[:r2_end_index]
+                try:
+                    r2_value = float(r2_value_str)
+                except ValueError:
+                    messagebox.showerror("Ошибка", f"Ошибка парсинга данных R2: {r2_value_str}")
 
-                # Записываем данные в три колонки: время, R1, R2
-                writer.writerow([current_time, r1_value if r1_value is not None else '',
-                                 r2_value if r2_value is not None else ''])
+            # Записываем данные в три колонки: время, R1, R2
+            self.ws.append([current_time, r1_value if r1_value is not None else '', r2_value if r2_value is not None else ''])
+            self.wb.save(self.file_path)
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка записи данных в файл: {str(e)}")
 
     def choose_file(self):
         """Открывает диалоговое окно для выбора файла для сохранения данных."""
-        self.file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+        self.file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
         if self.file_path:
             messagebox.showinfo("Информация", f"Файл для сохранения данных выбран: {self.file_path}")
 
@@ -390,7 +483,6 @@ class TermexApp:
         self.ax.set_ylim(bottom=0.00001, top=9999)
         self.ax.set_xlim(left=0)
 
-
     def save_settings(self):
         """Сохраняет значения параметров a, b и scale1 для обоих каналов."""
         try:
@@ -404,6 +496,22 @@ class TermexApp:
             messagebox.showinfo("Информация", "Значения сохранены.")
         except ValueError:
             messagebox.showerror("Ошибка", "Неверный формат данных. Введите числовые значения.")
+
+    def reset_settings(self):
+        """Возвращает значения параметров a, b и scale1 для обоих каналов к значениям по умолчанию."""
+        self.a1_entry.delete(0, tk.END)
+        self.a1_entry.insert(0, "3.96868e-3")
+        self.b1_entry.delete(0, tk.END)
+        self.b1_entry.insert(0, "-5.802e-7")
+        self.scale1_entry.delete(0, tk.END)
+        self.scale1_entry.insert(0, "1000")
+        self.a2_entry.delete(0, tk.END)
+        self.a2_entry.insert(0, "3.96868e-3")
+        self.b2_entry.delete(0, tk.END)
+        self.b2_entry.insert(0, "-5.802e-7")
+        self.scale2_entry.delete(0, tk.END)
+        self.scale2_entry.insert(0, "1000")
+        messagebox.showinfo("Информация", "Значения сброшены к значениям по умолчанию.")
 
     def calculate_temperature(self, R, a, b, scale):
         """Вычисляет температуру на основе сопротивления и параметров."""
@@ -421,14 +529,33 @@ class TermexApp:
 
         self.temperature_label.config(text=f"T1: {current_t1}, T2: {current_t2}")
 
+    class ConsoleRedirector:
+        def __init__(self, text_widget):
+            self.text_widget = text_widget
+
+        def write(self, msg):
+            self.text_widget.config(state='normal')
+            self.text_widget.insert(tk.END, msg)
+            self.text_widget.config(state='disabled')
+            self.text_widget.see(tk.END)
+
+        def flush(self):
+            pass
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = TermexApp(root)
 
     def on_closing():
         if messagebox.askokcancel("Выход", "Закрыть программу?"):
+            if app.serial_port and app.serial_port.is_open:
+                app.serial_port.close()
+            if app.read_data_thread and app.read_data_thread.is_alive():
+                app.read_data_thread.join(timeout=1)
+            if app.update_plot_thread and app.update_plot_thread.is_alive():
+                app.update_plot_thread.join(timeout=1)
             root.destroy()
-
+            sys.exit()
 
     root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
