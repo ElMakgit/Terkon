@@ -324,9 +324,6 @@ class TermexApp:
             # Очистка данных
             self.clear_data()
 
-            # Очистка графика
-            self.clear_plot()
-
     def clear_data(self):
         """Очищает данные."""
         self.data_r1 = []
@@ -550,12 +547,18 @@ class TermexApp:
 
     def start_recording(self):
         """Начинает запись данных."""
+        if not self.file_path:
+            messagebox.showerror("Ошибка", "Сначала выберите файл для сохранения данных.")
+            return
         if not self.is_recording:
             self.is_recording = True
             messagebox.showinfo("Информация", "Запись данных начата.")
 
     def stop_recording(self):
         """Завершает запись данных."""
+        if not self.file_path:
+            messagebox.showerror("Ошибка", "Сначала выберите файл для сохранения данных.")
+            return
         if self.is_recording:
             self.is_recording = False
             messagebox.showinfo("Информация", "Запись данных завершена.")
@@ -591,6 +594,10 @@ class TermexApp:
 
         # Привязываем событие движения мыши к функции отображения значений точки
         self.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+
+        # Добавляем кнопку "Очистить график"
+        self.clear_plot_button = ttk.Button(self.plot_frame, text="Очистить график", command=self.clear_plot, style="TButton")
+        self.clear_plot_button.pack(side=tk.BOTTOM, anchor='w', padx=10, pady=10)
 
     def on_mouse_wheel(self, event):
         """Обрабатывает событие прокрутки колесика мыши для изменения масштаба графика."""
