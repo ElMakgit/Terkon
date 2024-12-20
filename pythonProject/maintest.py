@@ -20,10 +20,9 @@ class TermexApp:
         # меняем размер шрифта
         self.font_size = 16
 
-
         self.wb = Workbook()
         self.ws = self.wb.active
-        self.ws.append(["TIME", "R1", "R2"])  # Заголовки столбцов
+        self.ws.append(["TIME", "R1", "R2", "T1", "T2"])  # Заголовки столбцов
         # Создаем вкладки
 
         self.notebook = ttk.Notebook(root)
@@ -37,7 +36,6 @@ class TermexApp:
         self.paned_window = ttk.PanedWindow(self.main_frame, orient=tk.HORIZONTAL, )
         self.paned_window.pack(fill=tk.BOTH, expand=True)
 
-
         # Левая панель для данных
         self.data_frame = ttk.Frame(self.paned_window)
         self.paned_window.add(self.data_frame, weight=400)
@@ -46,7 +44,12 @@ class TermexApp:
         self.data_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
 
         self.data_display = tk.Text(self.data_frame, state='disabled', height=15, width=80, font=("Helvetica", self.font_size))
-        self.data_display.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.data_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Добавляем ползунок для прокрутки
+        self.scrollbar = ttk.Scrollbar(self.data_frame, command=self.data_display.yview)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.data_display.config(yscrollcommand=self.scrollbar.set)
 
         # Правая панель для портов
         self.port_frame = ttk.Frame(self.paned_window)
@@ -87,6 +90,8 @@ class TermexApp:
         self.file_path = None
         self.data_r1 = []
         self.data_r2 = []
+        self.data_t1 = []
+        self.data_t2 = []
         self.is_recording = False
         self.read_data_thread = None
         self.update_plot_thread = None  # Сохраняем ссылку на поток
@@ -98,16 +103,28 @@ class TermexApp:
         self.values_r1 = []
         self.times_r2 = []
         self.values_r2 = []
+        self.times_t1 = []
+        self.values_t1 = []
+        self.times_t2 = []
+        self.values_t2 = []
 
         # Чекбоксы для включения и отключения кривых
         self.show_r1 = BooleanVar(value=True)
         self.show_r2 = BooleanVar(value=True)
+        self.show_t1 = BooleanVar(value=True)
+        self.show_t2 = BooleanVar(value=True)
 
         self.r1_checkbox = ttk.Checkbutton(self.plot_frame, text="Показать 1R", variable=self.show_r1, command=self.update_plot, style="TCheckbutton")
         self.r1_checkbox.pack(anchor="se")
 
         self.r2_checkbox = ttk.Checkbutton(self.plot_frame, text="Показать 2R", variable=self.show_r2, command=self.update_plot, style="TCheckbutton")
         self.r2_checkbox.pack(anchor="se")
+
+        self.t1_checkbox = ttk.Checkbutton(self.plot_frame, text="Показать T1", variable=self.show_t1, command=self.update_plot, style="TCheckbutton")
+        self.t1_checkbox.pack(anchor="se")
+
+        self.t2_checkbox = ttk.Checkbutton(self.plot_frame, text="Показать T2", variable=self.show_t2, command=self.update_plot, style="TCheckbutton")
+        self.t2_checkbox.pack(anchor="se")
 
         self.open_plot_window()
 
@@ -166,6 +183,11 @@ class TermexApp:
         self.reset_settings_button = ttk.Button(self.setting_frame, text="Вернуть настройки по умолчанию", command=self.reset_settings, style="TButton")
         self.reset_settings_button.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
 
+        # Галочка для сохранения температуры в файл
+        self.save_temperature = BooleanVar(value=False)
+        self.save_temperature_checkbox = ttk.Checkbutton(self.setting_frame, text="Сохранять температуру в файл", variable=self.save_temperature, style="TCheckbutton")
+        self.save_temperature_checkbox.pack(anchor="w", padx=10, pady=10)
+
         # Инициализация параметров
         self.a1 = 3.96868e-3
         self.b1 = -5.802e-7
@@ -181,9 +203,16 @@ class TermexApp:
         # Флаг для темной темы
         self.dark_mode = BooleanVar(value=False)
 
+        # Флаг для режима чтения строки
+        self.read_line_mode = BooleanVar(value=False)
+
         # Стили для темной темы
         self.style = ttk.Style()
         self.style.theme_use("default")
+
+        # Метка для отображения координат курсора
+        self.cursor_label = ttk.Label(self.plot_frame, text="", font=("Helvetica", self.font_size))
+        self.cursor_label.pack(side=tk.BOTTOM, anchor='w', padx=10, pady=10)
 
     def adjust_entry_width(self, event):
         """Изменяет ширину поля ввода в зависимости от длины введенного текста."""
@@ -204,6 +233,9 @@ class TermexApp:
 
             self.dark_mode_checkbox = ttk.Checkbutton(self.developer_frame, text="Включить темную тему", variable=self.dark_mode, command=self.toggle_dark_mode, style="TCheckbutton")
             self.dark_mode_checkbox.pack(anchor="w", padx=10, pady=10)
+
+            self.read_line_checkbox = ttk.Checkbutton(self.developer_frame, text="Читать строку, а не 14 байт", variable=self.read_line_mode, style="TCheckbutton")
+            self.read_line_checkbox.pack(anchor="w", padx=10, pady=10)
 
             self.console_label = ttk.Label(self.developer_frame, text="Консоль:", font=("Helvetica", self.font_size))
             self.console_label.pack(anchor="w", padx=10, pady=10)
@@ -242,7 +274,6 @@ class TermexApp:
             self.data_display.config(bg="white", fg="black")
             self.port_listbox.config(bg="white", fg="black")
             self.console_output.config(bg="white", fg="black")
-
 
     def update_plot_thread(self):
         """Обновляет график данных в реальном времени в отдельном потоке."""
@@ -290,6 +321,41 @@ class TermexApp:
             if self.update_plot_thread and self.update_plot_thread.is_alive():
                 self.update_plot_thread.join(timeout=1)
 
+            # Очистка данных
+            self.clear_data()
+
+            # Очистка графика
+            self.clear_plot()
+
+    def clear_data(self):
+        """Очищает данные."""
+        self.data_r1 = []
+        self.data_r2 = []
+        self.data_t1 = []
+        self.data_t2 = []
+        self.times_r1 = []
+        self.values_r1 = []
+        self.times_r2 = []
+        self.values_r2 = []
+        self.times_t1 = []
+        self.values_t1 = []
+        self.times_t2 = []
+        self.values_t2 = []
+
+    def clear_plot(self):
+        """Очищает график."""
+        self.ax.clear()
+        self.ax.set_xlabel('Время (секунды)', fontsize=self.font_size)
+        self.ax.set_ylabel('Значение', fontsize=self.font_size)
+        self.ax.set_title('График данных', fontsize=self.font_size)
+        self.ax.grid(True)
+        self.line_r1, = self.ax.plot([], [], label='R1')
+        self.line_r2, = self.ax.plot([], [], label='R2')
+        self.line_t1, = self.ax.plot([], [], label='T1')
+        self.line_t2, = self.ax.plot([], [], label='T2')
+        self.ax.legend(fontsize=self.font_size)
+        self.canvas.draw()
+
     def read_data(self):
         print("функция работает")
         self.serial_port.dtr = True
@@ -298,7 +364,11 @@ class TermexApp:
         """Читает данные из COM-порта и обновляет отображение данных и график."""
         while self.serial_port and self.serial_port.is_open:
             try:
-                data = self.serial_port.readline().decode('utf-8').strip()
+                if self.read_line_mode.get():
+                    data = self.serial_port.readline().decode('utf-8').strip()
+                else:
+                    data = self.serial_port.read(14).decode('utf-8').strip()
+
                 print("Это чтение с порта: ", data)
                 current_time = time.time() - self.start_time  # Текущее время с начала записи
                 formatted_data = f"{current_time:.2f} - {data}"
@@ -345,12 +415,14 @@ class TermexApp:
                     self.data_r1.append((current_time, r1_value))
                     print(f"Добавлено значение R1: {current_time}, {r1_value}")
                     temperature_r1 = self.calculate_temperature(r1_value, self.a1, self.b1, self.scale1)
+                    self.data_t1.append((current_time, temperature_r1))
                     self.update_temperature_label(temperature_r1, None)
 
                 if r2_value is not None:
                     self.data_r2.append((current_time, r2_value))
                     print(f"Добавлено значение R2: {current_time}, {r2_value}")
                     temperature_r2 = self.calculate_temperature(r2_value, self.a2, self.b2, self.scale2)
+                    self.data_t2.append((current_time, temperature_r2))
                     self.update_temperature_label(None, temperature_r2)
 
                 # Обновление графика после добавления новых данных
@@ -371,8 +443,14 @@ class TermexApp:
         values_r1 = [entry[1] for entry in self.data_r1]
         times_r2 = [entry[0] for entry in self.data_r2]
         values_r2 = [entry[1] for entry in self.data_r2]
+        times_t1 = [entry[0] for entry in self.data_t1]
+        values_t1 = [entry[1] for entry in self.data_t1]
+        times_t2 = [entry[0] for entry in self.data_t2]
+        values_t2 = [entry[1] for entry in self.data_t2]
         print(f"Данные R1: {times_r1}, {values_r1}")  # Отладочное сообщение
         print(f"Данные R2: {times_r2}, {values_r2}")  # Отладочное сообщение
+        print(f"Данные T1: {times_t1}, {values_t1}")  # Отладочное сообщение
+        print(f"Данные T2: {times_t2}, {values_t2}")  # Отладочное сообщение
 
         if self.show_r1.get():
             self.line_r1.set_xdata(times_r1)
@@ -388,12 +466,27 @@ class TermexApp:
             self.line_r2.set_xdata([])
             self.line_r2.set_ydata([])
 
+        if self.show_t1.get():
+            self.line_t1.set_xdata(times_t1)
+            self.line_t1.set_ydata(values_t1)
+        else:
+            self.line_t1.set_xdata([])
+            self.line_t1.set_ydata([])
+
+        if self.show_t2.get():
+            self.line_t2.set_xdata(times_t2)
+            self.line_t2.set_ydata(values_t2)
+        else:
+            self.line_t2.set_xdata([])
+            self.line_t2.set_ydata([])
+
         # Обновление пределов осей
-        if times_r1 and times_r2:
-            max_time = max(max(times_r1), max(times_r2))
-            max_value = max(max(values_r1), max(values_r2))
+        if times_r1 and times_r2 and times_t1 and times_t2:
+            max_time = max(max(times_r1), max(times_r2), max(times_t1), max(times_t2))
+            max_value_r = max(max(values_r1), max(values_r2))
+            min_value_r = min(min(values_r1), min(values_r2))
             self.ax.set_xlim(left=0, right=max_time + 20)  # Увеличиваем масштаб в два раза
-            self.ax.set_ylim(bottom=0.00001, top=max_value + 200)  # Увеличиваем масштаб в два раза
+            self.ax.set_ylim(bottom=min_value_r - min_value_r * 0.01, top=max_value_r + max_value_r * 0.01)  # Увеличиваем масштаб в два раза
         else:
             self.ax.set_xlim(left=0, right=20)  # Начальные значения для осей
             self.ax.set_ylim(bottom=0.00001, top=20)
@@ -414,6 +507,8 @@ class TermexApp:
 
             r1_value = None
             r2_value = None
+            t1_value = None
+            t2_value = None
             r1_index = data.find('1R')
             r2_index = data.find('2R')
 
@@ -435,8 +530,14 @@ class TermexApp:
                 except ValueError:
                     messagebox.showerror("Ошибка", f"Ошибка парсинга данных R2: {r2_value_str}")
 
-            # Записываем данные в три колонки: время, R1, R2
-            self.ws.append([current_time, r1_value if r1_value is not None else '', r2_value if r2_value is not None else ''])
+            if self.save_temperature.get():
+                if r1_value is not None:
+                    t1_value = self.calculate_temperature(r1_value, self.a1, self.b1, self.scale1)
+                if r2_value is not None:
+                    t2_value = self.calculate_temperature(r2_value, self.a2, self.b2, self.scale2)
+
+            # Записываем данные в три колонки: время, R1, R2, T1, T2
+            self.ws.append([current_time, r1_value if r1_value is not None else '', r2_value if r2_value is not None else '', t1_value if t1_value is not None else '', t2_value if t2_value is not None else ''])
             self.wb.save(self.file_path)
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка записи данных в файл: {str(e)}")
@@ -467,8 +568,10 @@ class TermexApp:
         self.ax.set_title('График данных', fontsize=self.font_size)
         self.ax.grid(True)  # Добавление сетки
 
-        self.line_r1, = self.ax.plot(self.times_r1, self.values_r1, label='R1')
-        self.line_r2, = self.ax.plot(self.times_r2, self.values_r2, label='R2')
+        self.line_r1, = self.ax.plot([], [], label='R1')
+        self.line_r2, = self.ax.plot([], [], label='R2')
+        self.line_t1, = self.ax.plot([], [], label='T1')
+        self.line_t2, = self.ax.plot([], [], label='T2')
 
         self.ax.legend(fontsize=self.font_size)
 
@@ -482,6 +585,34 @@ class TermexApp:
 
         self.ax.set_ylim(bottom=0.00001, top=9999)
         self.ax.set_xlim(left=0)
+
+        # Привязываем событие прокрутки колесика мыши к функции изменения масштаба
+        self.canvas.mpl_connect('scroll_event', self.on_mouse_wheel)
+
+        # Привязываем событие движения мыши к функции отображения значений точки
+        self.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+
+    def on_mouse_wheel(self, event):
+        """Обрабатывает событие прокрутки колесика мыши для изменения масштаба графика."""
+        current_xlim = self.ax.get_xlim()
+        current_ylim = self.ax.get_ylim()
+        scale_factor = 1.1 if event.button == 'up' else 0.9
+        new_xlim = (current_xlim[0] * scale_factor, current_xlim[1] * scale_factor)
+        new_ylim = (current_ylim[0] * scale_factor, current_ylim[1] * scale_factor)
+
+        self.ax.set_xlim(new_xlim)
+        self.ax.set_ylim(new_ylim)
+        self.canvas.draw()
+
+    def on_mouse_move(self, event):
+        """Обрабатывает событие движения мыши для отображения значений точки на графике."""
+        if event.inaxes:
+            x, y = event.xdata, event.ydata
+            self.update_cursor_label(x, y)
+
+    def update_cursor_label(self, x, y):
+        """Обновляет отображение значений точки на графике."""
+        self.cursor_label.config(text=f"X: {x:.2f}, Y: {y:.2f}")
 
     def save_settings(self):
         """Сохраняет значения параметров a, b и scale1 для обоих каналов."""
