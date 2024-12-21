@@ -6,10 +6,9 @@ import time
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import threading
-import openpyxl
 from openpyxl import Workbook
 import sys
-import os
+
 
 class TermexApp:
     def __init__(self, root):
@@ -33,34 +32,34 @@ class TermexApp:
         self.notebook.add(self.main_frame, text="Главный экран")
 
         # Создаем панель для разделения окон
-        self.paned_window = ttk.PanedWindow(self.main_frame, orient=tk.HORIZONTAL, )
+        self.paned_window = tk.PanedWindow(self.main_frame, orient=tk.HORIZONTAL, sashrelief=tk.RAISED, sashwidth=15)
         self.paned_window.pack(fill=tk.BOTH, expand=True)
 
         # Левая панель для данных
-        self.data_frame = ttk.Frame(self.paned_window)
-        self.paned_window.add(self.data_frame, weight=400)
+        self.data_frame = tk.Frame(self.paned_window)
+        self.paned_window.add(self.data_frame, minsize=400)
 
-        self.data_label = ttk.Label(self.data_frame, text="Данные:", font=("Helvetica", self.font_size))
-        self.data_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
+        self.data_label = tk.Label(self.data_frame, text="Данные:", font=("Helvetica", self.font_size))
+        self.data_label.pack(side=tk.TOP, anchor='w', padx=30, pady=5)
 
-        self.data_display = tk.Text(self.data_frame, state='disabled', height=15, width=80, font=("Helvetica", self.font_size))
-        self.data_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.data_display = tk.Text(self.data_frame, state='disabled', height=10, width=70, font=("Helvetica", self.font_size))
+        self.data_display.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=30, pady=5)
+
+        # Правая панель для портов
+        self.port_frame = tk.Frame(self.paned_window)
+        self.paned_window.add(self.port_frame, minsize=200)
+
+        self.port_label = tk.Label(self.port_frame, text="COM-порт:", font=("Helvetica", self.font_size))
+        self.port_label.pack(side=tk.TOP, anchor='w', padx=5, pady=5)
+
+        self.port_listbox = tk.Listbox(self.port_frame, width=20, height=10, font=("Helvetica", self.font_size))
+        self.port_listbox.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.port_listbox.bind('<Double-1>', self.connect_to_device)
 
         # Добавляем ползунок для прокрутки
         self.scrollbar = ttk.Scrollbar(self.data_frame, command=self.data_display.yview)
-        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.scrollbar.place(x=1, y=5, relheight=1.0)
         self.data_display.config(yscrollcommand=self.scrollbar.set)
-
-        # Правая панель для портов
-        self.port_frame = ttk.Frame(self.paned_window)
-        self.paned_window.add(self.port_frame, weight=150 )
-
-        self.port_label = ttk.Label(self.port_frame, text="COM-порт:", font=("Helvetica", self.font_size))
-        self.port_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
-
-        self.port_listbox = tk.Listbox(self.port_frame, width=30, height=15, font=("Helvetica", self.font_size))
-        self.port_listbox.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
-        self.port_listbox.bind('<Double-1>', self.connect_to_device)
 
         # Создаем фрейм для кнопок
         self.button_frame = ttk.Frame(self.main_frame)
@@ -74,6 +73,7 @@ class TermexApp:
 
         self.stop_record_button = ttk.Button(self.button_frame, text="Закончить запись", command=self.stop_recording, style="TButton")
         self.stop_record_button.pack(side=tk.LEFT, padx=5)
+        self.stop_record_button.config(state='disabled')
 
         self.disconnect_button = ttk.Button(self.button_frame, text="Отключиться от порта", command=self.disconnect_from_device, style="TButton")
         self.disconnect_button.pack(side=tk.LEFT, padx=5)
@@ -131,6 +131,11 @@ class TermexApp:
         # Вкладка для настроек
         self.setting_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.setting_frame, text="Настройки")
+
+        # Выпадающий список для выбора языка
+        self.language_var = tk.StringVar(value="Ru")
+        self.language_menu = ttk.OptionMenu(self.setting_frame, self.language_var, "Ru", "Ru", "En", command=self.change_language)
+        self.language_menu.pack(side=tk.TOP, anchor='e', padx=10, pady=10)
 
         # Параметры для 1R
         self.a1_label = ttk.Label(self.setting_frame, text="a (1R):", font=("Helvetica", self.font_size))
@@ -200,19 +205,190 @@ class TermexApp:
         self.temperature_label = ttk.Label(self.main_frame, text="T1: 0.00, T2: 0.00", font=("Helvetica", self.font_size))
         self.temperature_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
 
-        # Флаг для темной темы
-        self.dark_mode = BooleanVar(value=False)
-
         # Флаг для режима чтения строки
         self.read_line_mode = BooleanVar(value=False)
-
-        # Стили для темной темы
-        self.style = ttk.Style()
-        self.style.theme_use("default")
 
         # Метка для отображения координат курсора
         self.cursor_label = ttk.Label(self.plot_frame, text="", font=("Helvetica", self.font_size))
         self.cursor_label.pack(side=tk.BOTTOM, anchor='w', padx=10, pady=10)
+
+        # Вкладка для помощи
+        self.help_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.help_frame, text="Помощь")
+
+        self.help_label = ttk.Label(self.help_frame, text="Раздел помощи", font=("Helvetica", self.font_size))
+        self.help_label.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
+
+        self.help_text = tk.Text(self.help_frame, state='disabled', height=20, width=80, font=("Helvetica", self.font_size))
+        self.help_text.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Добавляем текст помощи
+        help_content = """
+        Это приложение предназначено для сбора и отображения данных с COM-порта.
+
+        Основные функции:
+        - Подключение к COM-порту
+        - Запись данных в Excel файл
+        - Отображение данных в реальном времени на графике
+        - Настройка параметров для расчета температуры
+
+        Инструкции:
+        1. Выберите COM-порт из списка и подключитесь к нему.
+        2. Выберите файл для сохранения данных.
+        3. Нажмите "Начать запись" для начала сбора данных.
+        4. Нажмите "Закончить запись" для остановки сбора данных.
+        5. Настройте параметры a, b и scale1 для обоих каналов в разделе "Настройки".
+        6. Включите или отключите отображение кривых на графике с помощью чекбоксов.
+
+        Подробные инструкции:
+        - Подключение к COM-порту:
+          Выберите COM-порт из списка доступных портов и дважды щелкните по нему. Приложение подключится к выбранному порту и начнет получать данные.
+
+        - Запись данных:
+          Для начала записи данных нажмите кнопку "Начать запись". Данные будут сохраняться в выбранный файл. Для остановки записи нажмите кнопку "Закончить запись".
+
+        - Отображение данных на графике:
+          Данные будут отображаться на графике в реальном времени. Вы можете включить или отключить отображение кривых с помощью чекбоксов.
+
+        - Настройка параметров:
+          В разделе "Настройки" вы можете настроить параметры a, b и scale1 для обоих каналов. Эти параметры используются для расчета температуры.
+
+        - Сохранение данных:
+          Данные сохраняются в Excel файл. Вы можете выбрать файл для сохранения данных, нажав кнопку "Выбрать файл для сохранения".
+
+        Контакты разработчика:
+        Telegram: @Abob_TGm
+        """
+        self.help_text.config(state='normal')
+        self.help_text.insert(tk.END, help_content)
+        self.help_text.config(state='disabled')
+
+        # Словарь для переводов
+        self.translations = {
+            "Ru": {
+                "title": "ТЕРКОН",
+                "main_tab": "Главный экран",
+                "plot_tab": "График",
+                "settings_tab": "Настройки",
+                "help_tab": "Помощь",
+                "data_label": "Данные:",
+                "port_label": "COM-порт:",
+                "save_button": "Выбрать файл для сохранения",
+                "start_button": "Начать запись",
+                "stop_button": "Закончить запись",
+                "disconnect_button": "Отключиться от порта",
+                "update_port_button": "Обновить порты",
+                "a1_label": "a (1R):",
+                "b1_label": "b (1R):",
+                "scale1_label": "scale1 (1R):",
+                "a2_label": "a (2R):",
+                "b2_label": "b (2R):",
+                "scale2_label": "scale2 (2R):",
+                "save_settings_button": "Сохранить значения",
+                "reset_settings_button": "Вернуть настройки по умолчанию",
+                "save_temperature_checkbox": "Сохранять температуру в файл",
+                "temperature_label": "T1: 0.00, T2: 0.00",
+                "help_label": "Раздел помощи",
+                "help_content": help_content
+            },
+            "En": {
+                "title": "TERKON",
+                "main_tab": "Main Screen",
+                "plot_tab": "Plot",
+                "settings_tab": "Settings",
+                "help_tab": "Help",
+                "data_label": "Data:",
+                "port_label": "COM Port:",
+                "save_button": "Choose File to Save",
+                "start_button": "Start Recording",
+                "stop_button": "Stop Recording",
+                "disconnect_button": "Disconnect from Port",
+                "update_port_button": "Update Ports",
+                "a1_label": "a (1R):",
+                "b1_label": "b (1R):",
+                "scale1_label": "scale1 (1R):",
+                "a2_label": "a (2R):",
+                "b2_label": "b (2R):",
+                "scale2_label": "scale2 (2R):",
+                "save_settings_button": "Save Values",
+                "reset_settings_button": "Reset to Default",
+                "save_temperature_checkbox": "Save Temperature to File",
+                "temperature_label": "T1: 0.00, T2: 0.00",
+                "help_label": "Help Section",
+                "help_content": """
+                This application is designed to collect and display data from a COM port.
+
+                Main functions:
+                - Connect to COM port
+                - Save data to Excel file
+                - Display data in real-time on a graph
+                - Adjust parameters for temperature calculation
+
+                Instructions:
+                1. Select a COM port from the list and connect to it.
+                2. Choose a file to save the data.
+                3. Click "Start Recording" to begin data collection.
+                4. Click "Stop Recording" to stop data collection.
+                5. Adjust the parameters a, b, and scale1 for both channels in the "Settings" section.
+                6. Enable or disable the display of curves on the graph using the checkboxes.
+
+                Detailed Instructions:
+                - Connecting to COM Port:
+                  Select a COM port from the list of available ports and double-click it. The application will connect to the selected port and start receiving data.
+
+                - Recording Data:
+                  To start recording data, click the "Start Recording" button. Data will be saved to the selected file. To stop recording, click the "Stop Recording" button.
+
+                - Displaying Data on the Graph:
+                  Data will be displayed on the graph in real-time. You can enable or disable the display of curves using the checkboxes.
+
+                - Adjusting Parameters:
+                  In the "Settings" section, you can adjust the parameters a, b, and scale1 for both channels. These parameters are used for temperature calculation.
+
+                - Saving Data:
+                  Data is saved to an Excel file. You can select a file to save the data by clicking the "Choose File to Save" button.
+
+                Developer Contacts:
+                Telegram: @Abob_TGm
+                """
+            }
+        }
+
+    def change_language(self, *args):
+        """Изменяет язык интерфейса."""
+        language = self.language_var.get()
+        translations = self.translations[language]
+
+        self.root.title(translations["title"])
+        self.notebook.tab(self.main_frame, text=translations["main_tab"])
+        self.notebook.tab(self.plot_frame, text=translations["plot_tab"])
+        self.notebook.tab(self.setting_frame, text=translations["settings_tab"])
+        self.notebook.tab(self.help_frame, text=translations["help_tab"])
+
+        self.data_label.config(text=translations["data_label"])
+        self.port_label.config(text=translations["port_label"])
+        self.save_button.config(text=translations["save_button"])
+        self.start_record_button.config(text=translations["start_button"])
+        self.stop_record_button.config(text=translations["stop_button"])
+        self.disconnect_button.config(text=translations["disconnect_button"])
+        self.update_port_button.config(text=translations["update_port_button"])
+
+        self.a1_label.config(text=translations["a1_label"])
+        self.b1_label.config(text=translations["b1_label"])
+        self.scale1_label.config(text=translations["scale1_label"])
+        self.a2_label.config(text=translations["a2_label"])
+        self.b2_label.config(text=translations["b2_label"])
+        self.scale2_label.config(text=translations["scale2_label"])
+        self.save_settings_button.config(text=translations["save_settings_button"])
+        self.reset_settings_button.config(text=translations["reset_settings_button"])
+        self.save_temperature_checkbox.config(text=translations["save_temperature_checkbox"])
+        self.temperature_label.config(text=translations["temperature_label"])
+        self.help_label.config(text=translations["help_label"])
+
+        self.help_text.config(state='normal')
+        self.help_text.delete(1.0, tk.END)
+        self.help_text.insert(tk.END, translations["help_content"])
+        self.help_text.config(state='disabled')
 
     def adjust_entry_width(self, event):
         """Изменяет ширину поля ввода в зависимости от длины введенного текста."""
@@ -231,9 +407,6 @@ class TermexApp:
             self.developer_frame = ttk.Frame(self.notebook)
             self.notebook.add(self.developer_frame, text="Настройки разработчика")
 
-            self.dark_mode_checkbox = ttk.Checkbutton(self.developer_frame, text="Включить темную тему", variable=self.dark_mode, command=self.toggle_dark_mode, style="TCheckbutton")
-            self.dark_mode_checkbox.pack(anchor="w", padx=10, pady=10)
-
             self.read_line_checkbox = ttk.Checkbutton(self.developer_frame, text="Читать строку, а не 14 байт", variable=self.read_line_mode, style="TCheckbutton")
             self.read_line_checkbox.pack(anchor="w", padx=10, pady=10)
 
@@ -245,35 +418,6 @@ class TermexApp:
 
             # Перенаправление stdout для вывода в консоль
             sys.stdout = self.ConsoleRedirector(self.console_output)
-
-    def toggle_dark_mode(self):
-        """Переключает темную тему."""
-        if self.dark_mode.get():
-            self.style.theme_use("clam")  # Используем темную тему
-            self.style.configure("TNotebook", background="black")
-            self.style.configure("TFrame", background="black")
-            self.style.configure("TLabel", background="black", foreground="white")
-            self.style.configure("TButton", background="black", foreground="white")
-            self.style.configure("TCheckbutton", background="black", foreground="white")
-            self.style.configure("TEntry", fieldbackground="black", foreground="white")
-            self.style.configure("TListbox", fieldbackground="black", foreground="white")
-            self.style.configure("TText", fieldbackground="black", foreground="white")
-            self.data_display.config(bg="black", fg="white")
-            self.port_listbox.config(bg="black", fg="white")
-            self.console_output.config(bg="black", fg="white")
-        else:
-            self.style.theme_use("default")  # Возвращаемся к светлой теме
-            self.style.configure("TNotebook", background="SystemButtonFace")
-            self.style.configure("TFrame", background="SystemButtonFace")
-            self.style.configure("TLabel", background="SystemButtonFace", foreground="black")
-            self.style.configure("TButton", background="SystemButtonFace", foreground="black")
-            self.style.configure("TCheckbutton", background="SystemButtonFace", foreground="black")
-            self.style.configure("TEntry", fieldbackground="white", foreground="black")
-            self.style.configure("TListbox", fieldbackground="white", foreground="black")
-            self.style.configure("TText", fieldbackground="white", foreground="black")
-            self.data_display.config(bg="white", fg="black")
-            self.port_listbox.config(bg="white", fg="black")
-            self.console_output.config(bg="white", fg="black")
 
     def update_plot_thread(self):
         """Обновляет график данных в реальном времени в отдельном потоке."""
@@ -552,6 +696,8 @@ class TermexApp:
             return
         if not self.is_recording:
             self.is_recording = True
+            self.start_record_button.config(state='disabled')
+            self.stop_record_button.config(state='normal')
             messagebox.showinfo("Информация", "Запись данных начата.")
 
     def stop_recording(self):
@@ -561,6 +707,8 @@ class TermexApp:
             return
         if self.is_recording:
             self.is_recording = False
+            self.start_record_button.config(state='normal')
+            self.stop_record_button.config(state='disabled')
             messagebox.showinfo("Информация", "Запись данных завершена.")
 
     def open_plot_window(self):
@@ -624,16 +772,27 @@ class TermexApp:
     def save_settings(self):
         """Сохраняет значения параметров a, b и scale1 для обоих каналов."""
         try:
-            self.a1 = float(self.a1_entry.get())
-            print(self.a1)
-            self.b1 = float(self.b1_entry.get())
-            self.scale1 = float(self.scale1_entry.get())
-            self.a2 = float(self.a2_entry.get())
-            self.b2 = float(self.b2_entry.get())
-            self.scale2 = float(self.scale2_entry.get())
+            # Проверка и преобразование значений
+            a1_value = self.a1_entry.get().strip()
+            b1_value = self.b1_entry.get().strip()
+            scale1_value = self.scale1_entry.get().strip()
+            a2_value = self.a2_entry.get().strip()
+            b2_value = self.b2_entry.get().strip()
+            scale2_value = self.scale2_entry.get().strip()
+
+            if not a1_value or not b1_value or not scale1_value or not a2_value or not b2_value or not scale2_value:
+                raise ValueError("Одно или несколько полей пусты.")
+
+            self.a1 = float(a1_value)
+            self.b1 = float(b1_value)
+            self.scale1 = float(scale1_value)
+            self.a2 = float(a2_value)
+            self.b2 = float(b2_value)
+            self.scale2 = float(scale2_value)
+
             messagebox.showinfo("Информация", "Значения сохранены.")
-        except ValueError:
-            messagebox.showerror("Ошибка", "Неверный формат данных. Введите числовые значения.")
+        except ValueError as e:
+            messagebox.showerror("Ошибка", f"Неверный формат данных. {str(e)}")
 
     def reset_settings(self):
         """Возвращает значения параметров a, b и scale1 для обоих каналов к значениям по умолчанию."""
