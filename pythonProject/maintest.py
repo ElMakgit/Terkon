@@ -8,7 +8,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 import threading
 from openpyxl import Workbook
 import sys
-
+import random
 
 class TermexApp:
     def __init__(self, root):
@@ -65,8 +65,8 @@ class TermexApp:
         self.button_frame = ttk.Frame(self.main_frame)
         self.button_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
 
-        self.save_button = ttk.Button(self.button_frame, text="Выбрать файл для сохранения", command=self.choose_file, style="TButton")
-        self.save_button.pack(side=tk.LEFT, padx=5)
+        self.create_file_button = ttk.Button(self.button_frame, text="Создать файл для сохранения", command=self.create_file, style="TButton")
+        self.create_file_button.pack(side=tk.LEFT, padx=5)
 
         self.start_record_button = ttk.Button(self.button_frame, text="Начать запись", command=self.start_recording, style="TButton")
         self.start_record_button.pack(side=tk.LEFT, padx=5)
@@ -224,8 +224,6 @@ class TermexApp:
 
         # Добавляем текст помощи
         help_content = """
-        Это приложение предназначено для сбора и отображения данных с COM-порта.
-
         Основные функции:
         - Подключение к COM-порту
         - Запись данных в Excel файл
@@ -234,7 +232,7 @@ class TermexApp:
 
         Инструкции:
         1. Выберите COM-порт из списка и подключитесь к нему.
-        2. Выберите файл для сохранения данных.
+        2. Создайте файл для сохранения данных.
         3. Нажмите "Начать запись" для начала сбора данных.
         4. Нажмите "Закончить запись" для остановки сбора данных.
         5. Настройте параметры a, b и scale1 для обоих каналов в разделе "Настройки".
@@ -242,19 +240,24 @@ class TermexApp:
 
         Подробные инструкции:
         - Подключение к COM-порту:
-          Выберите COM-порт из списка доступных портов и дважды щелкните по нему. Приложение подключится к выбранному порту и начнет получать данные.
+          Выберите COM-порт из списка доступных портов и дважды щелкните по нему. 
+          Приложение подключится к выбранному порту и начнет получать данные.
 
         - Запись данных:
-          Для начала записи данных нажмите кнопку "Начать запись". Данные будут сохраняться в выбранный файл. Для остановки записи нажмите кнопку "Закончить запись".
+          Для начала записи данных нажмите кнопку "Начать запись". 
+          Данные будут сохраняться в выбранный файл. Для остановки записи нажмите кнопку "Закончить запись".
 
         - Отображение данных на графике:
-          Данные будут отображаться на графике в реальном времени. Вы можете включить или отключить отображение кривых с помощью чекбоксов.
+          Данные будут отображаться на графике в реальном времени. 
+          Вы можете включить или отключить отображение кривых с помощью чекбоксов.
 
         - Настройка параметров:
-          В разделе "Настройки" вы можете настроить параметры a, b и scale1 для обоих каналов. Эти параметры используются для расчета температуры.
+          В разделе "Настройки" вы можете настроить параметры a, b и scale1 для обоих каналов.
+          Эти параметры используются для расчета температуры.
 
         - Сохранение данных:
-          Данные сохраняются в Excel файл. Вы можете выбрать файл для сохранения данных, нажав кнопку "Выбрать файл для сохранения".
+          Данные сохраняются в Excel файл. 
+          Вы можете создать файл для сохранения данных, нажав кнопку "Создать файл".
 
         Контакты разработчика:
         Telegram: @Abob_TGm
@@ -273,7 +276,7 @@ class TermexApp:
                 "help_tab": "Помощь",
                 "data_label": "Данные:",
                 "port_label": "COM-порт:",
-                "save_button": "Выбрать файл для сохранения",
+                "create_button": "Создать файл",
                 "start_button": "Начать запись",
                 "stop_button": "Закончить запись",
                 "disconnect_button": "Отключиться от порта",
@@ -299,7 +302,7 @@ class TermexApp:
                 "help_tab": "Help",
                 "data_label": "Data:",
                 "port_label": "COM Port:",
-                "save_button": "Choose File to Save",
+                "create_button": "Create File",
                 "start_button": "Start Recording",
                 "stop_button": "Stop Recording",
                 "disconnect_button": "Disconnect from Port",
@@ -316,8 +319,6 @@ class TermexApp:
                 "temperature_label": "T1: 0.00, T2: 0.00",
                 "help_label": "Help Section",
                 "help_content": """
-                This application is designed to collect and display data from a COM port.
-
                 Main functions:
                 - Connect to COM port
                 - Save data to Excel file
@@ -326,7 +327,7 @@ class TermexApp:
 
                 Instructions:
                 1. Select a COM port from the list and connect to it.
-                2. Choose a file to save the data.
+                2. Create a file to save the data.
                 3. Click "Start Recording" to begin data collection.
                 4. Click "Stop Recording" to stop data collection.
                 5. Adjust the parameters a, b, and scale1 for both channels in the "Settings" section.
@@ -334,25 +335,40 @@ class TermexApp:
 
                 Detailed Instructions:
                 - Connecting to COM Port:
-                  Select a COM port from the list of available ports and double-click it. The application will connect to the selected port and start receiving data.
+                  Select a COM port from the list of available ports and double-click it. 
+                  The application will connect to the selected port and start receiving data.
 
                 - Recording Data:
-                  To start recording data, click the "Start Recording" button. Data will be saved to the selected file. To stop recording, click the "Stop Recording" button.
+                  To start recording data, click the "Start Recording" button. 
+                  Data will be saved to the selected file. To stop recording, click the "Stop Recording" button.
 
                 - Displaying Data on the Graph:
-                  Data will be displayed on the graph in real-time. You can enable or disable the display of curves using the checkboxes.
+                  Data will be displayed on the graph in real-time. 
+                  You can enable or disable the display of curves using the checkboxes.
 
                 - Adjusting Parameters:
-                  In the "Settings" section, you can adjust the parameters a, b, and scale1 for both channels. These parameters are used for temperature calculation.
+                  In the "Settings" section, you can adjust the parameters a, b, and scale1 for both channels. 
+                  These parameters are used for temperature calculation.
 
                 - Saving Data:
-                  Data is saved to an Excel file. You can select a file to save the data by clicking the "Choose File to Save" button.
+                  Data is saved to an Excel file. 
+                  You can create a file to save the data by clicking the "Create File" button.
 
                 Developer Contacts:
                 Telegram: @Abob_TGm
                 """
             }
         }
+
+        # Инициализация анимации снежинок
+        self.snowflakes = []
+        self.snow_mode = BooleanVar(value=False)
+        self.snow_mode.trace("w", self.toggle_snow_mode)
+
+        # Проверка даты для автоматического включения режима снега
+        current_date = time.strftime("%d-%m")
+        if "25-12" <= current_date <= "10-01":
+            self.snow_mode.set(True)
 
     def change_language(self, *args):
         """Изменяет язык интерфейса."""
@@ -367,7 +383,7 @@ class TermexApp:
 
         self.data_label.config(text=translations["data_label"])
         self.port_label.config(text=translations["port_label"])
-        self.save_button.config(text=translations["save_button"])
+        self.create_file_button.config(text=translations["create_button"])
         self.start_record_button.config(text=translations["start_button"])
         self.stop_record_button.config(text=translations["stop_button"])
         self.disconnect_button.config(text=translations["disconnect_button"])
@@ -418,6 +434,10 @@ class TermexApp:
 
             # Перенаправление stdout для вывода в консоль
             sys.stdout = self.ConsoleRedirector(self.console_output)
+
+            # Добавление тумблера для включения и выключения режима снега
+            self.snow_mode_checkbox = ttk.Checkbutton(self.developer_frame, text="Включить режим снега", variable=self.snow_mode, style="TCheckbutton")
+            self.snow_mode_checkbox.pack(anchor="w", padx=10, pady=10)
 
     def update_plot_thread(self):
         """Обновляет график данных в реальном времени в отдельном потоке."""
@@ -683,16 +703,16 @@ class TermexApp:
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка записи данных в файл: {str(e)}")
 
-    def choose_file(self):
-        """Открывает диалоговое окно для выбора файла для сохранения данных."""
+    def create_file(self):
+        """Открывает диалоговое окно для создания файла для сохранения данных."""
         self.file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
         if self.file_path:
-            messagebox.showinfo("Информация", f"Файл для сохранения данных выбран: {self.file_path}")
+            messagebox.showinfo("Информация", f"Файл для сохранения данных создан: {self.file_path}")
 
     def start_recording(self):
         """Начинает запись данных."""
         if not self.file_path:
-            messagebox.showerror("Ошибка", "Сначала выберите файл для сохранения данных.")
+            messagebox.showerror("Ошибка", "Сначала создайте файл для сохранения данных.")
             return
         if not self.is_recording:
             self.is_recording = True
@@ -703,7 +723,7 @@ class TermexApp:
     def stop_recording(self):
         """Завершает запись данных."""
         if not self.file_path:
-            messagebox.showerror("Ошибка", "Сначала выберите файл для сохранения данных.")
+            messagebox.showerror("Ошибка", "Сначала создайте файл для сохранения данных.")
             return
         if self.is_recording:
             self.is_recording = False
@@ -838,6 +858,57 @@ class TermexApp:
 
         def flush(self):
             pass
+
+    def toggle_snow_mode(self, *args):
+        """Включает или выключает режим снега."""
+        if self.snow_mode.get():
+            self.start_snow_animation()
+        else:
+            self.stop_snow_animation()
+
+    def start_snow_animation(self):
+        """Запускает анимацию снежинок."""
+        self.snow_thread = threading.Thread(target=self.snow_animation)
+        self.snow_thread.daemon = True
+        self.snow_thread.start()
+
+    def stop_snow_animation(self):
+        """Останавливает анимацию снежинок."""
+        self.snowflakes = []
+        self.root.after_cancel(self.snow_animation_id)
+
+    def snow_animation(self):
+        """Анимация падающих снежинок."""
+        while self.snow_mode.get():
+            if random.random() < 0.1:  # Вероятность создания новой снежинки
+                snowflake = Snowflake(self.root)
+                self.snowflakes.append(snowflake)
+            for snowflake in self.snowflakes:
+                snowflake.move()
+                if snowflake.y > self.root.winfo_height():
+                    self.snowflakes.remove(snowflake)
+                    snowflake.destroy()
+            self.root.update_idletasks()
+            time.sleep(0.05)
+
+
+class Snowflake:
+    def __init__(self, root):
+        self.root = root
+        self.x = random.randint(0, self.root.winfo_width())
+        self.y = 0
+        self.size = random.randint(5, 10)
+        self.speed = random.randint(1, 3)
+        self.label = tk.Label(self.root, text="❄", font=("Helvetica", self.size), bg="white")
+        self.label.place(x=self.x, y=self.y)
+
+    def move(self):
+        self.y += self.speed
+        self.label.place(x=self.x, y=self.y)
+
+    def destroy(self):
+        self.label.destroy()
+
 
 if __name__ == "__main__":
     root = tk.Tk()
