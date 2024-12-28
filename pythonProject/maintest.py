@@ -459,6 +459,7 @@ class TermexApp:
             if messagebox.askokcancel("Подтверждение", "Все данные на графике будут удалены. Продолжить?"):
                 self.connecting_to_new_port = True
                 self.disconnect_from_device()
+
         selected_port = self.port_listbox.get(self.port_listbox.curselection())
         try:
             if messagebox.askokcancel("Подтверждение", "Все данные на графике будут удалены. Продолжить?"):
@@ -467,6 +468,13 @@ class TermexApp:
                 self.data_display.insert(tk.END, "Успешно подключено к " + selected_port + "\n")
                 self.data_display.config(state='disabled')
                 self.start_time = time.time()
+
+                # Проверка на наличие активных потоков и их завершение
+                if self.read_data_thread and self.read_data_thread.is_alive():
+                    self.read_data_thread.join(timeout=1)
+                if self.update_plot_thread and self.update_plot_thread.is_alive():
+                    self.update_plot_thread.join(timeout=1)
+
                 self.read_data_thread = threading.Thread(target=self.read_data)
                 self.read_data_thread.daemon = True
                 self.read_data_thread.start()
@@ -486,6 +494,7 @@ class TermexApp:
             self.data_display.config(state='normal')
             self.data_display.insert(tk.END, "Отключено от порта\n")
             self.data_display.config(state='disabled')
+
             if self.read_data_thread and self.read_data_thread.is_alive():
                 self.read_data_thread.join(timeout=1)
             if self.update_plot_thread and self.update_plot_thread.is_alive():
@@ -607,7 +616,6 @@ class TermexApp:
                 if temperature_r2 is not None:
                     print(f"{current_time_str} - Calculated T2 value: {temperature_r2}")
 
-
             except serial.SerialException as e:
                 self.root.after(0, self.show_error_message, "Ошибка чтения данных: " + str(e))
                 exit()
@@ -630,6 +638,9 @@ class TermexApp:
         self.data_count_checked = False
 
     def update_plot(self):
+        if self.stop_auto_update:
+            return
+
         if not self.data_r1 and not self.data_r2 and not self.data_t1 and not self.data_t2:
             messagebox.showinfo("Информация", "Нет данных для отображения на графике.")
             return
@@ -725,7 +736,7 @@ class TermexApp:
                     r1_end_index = r1_str.find(' ') if ' ' in r1_str else len(r1_str)
                     r1_value_str = r1_str[:r1_end_index]
                     try:
-                        r1_value = float(r1_value_str)
+                        r1_value = float(r1_value_str.replace(',', '.'))
                     except ValueError:
                         messagebox.showerror("Ошибка", f"Ошибка парсинга данных R1: {r1_value_str}")
 
@@ -734,7 +745,7 @@ class TermexApp:
                     r2_end_index = r2_str.find(' ') if ' ' in r2_str else len(r2_str)
                     r2_value_str = r2_str[:r2_end_index]
                     try:
-                        r2_value = float(r2_value_str)
+                        r2_value = float(r2_value_str.replace(',', '.'))
                     except ValueError:
                         messagebox.showerror("Ошибка", f"Ошибка парсинга данных R2: {r2_value_str}")
 
@@ -744,7 +755,11 @@ class TermexApp:
                     if r2_value is not None:
                         t2_value = self.calculate_temperature(r2_value, self.a2, self.b2, self.scale2)
 
-                self.ws.append([current_time, r1_value if r1_value is not None else '', r2_value if r2_value is not None else '', t1_value if t1_value is not None else '', t2_value if t2_value is not None else ''])
+                self.ws.append([f"{current_time:.6f}".replace(',', '.'),
+                                f"{r1_value:.6f}".replace(',', '.') if r1_value is not None else '',
+                                f"{r2_value:.6f}".replace(',', '.') if r2_value is not None else '',
+                                f"{t1_value:.6f}".replace(',', '.') if t1_value is not None else '',
+                                f"{t2_value:.6f}".replace(',', '.') if t2_value is not None else ''])
                 self.wb.save(self.file_path)
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Ошибка записи данных в файл: {str(e)}")
