@@ -1035,7 +1035,7 @@ class TermexApp:
 
 def check_for_updates(current_version):
     # Этот участок кода выполняет проверку наличия новых версий на GitHub
-    url = "https://github.com/ElMakgit/Terkon/pythonProject/version.json"
+    url = "https://github.com/ElMakgit/Terkon/blob/main/pythonProject/version.json"
     try:
         response = requests.get(url)
         response.raise_for_status()
