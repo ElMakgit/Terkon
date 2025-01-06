@@ -10,6 +10,8 @@ from openpyxl import Workbook
 import sys
 import queue
 from datetime import datetime
+import requests
+import subprocess
 
 class TermexApp:
     def __init__(self, root):
@@ -26,15 +28,21 @@ class TermexApp:
         self.ws = self.wb.active
         self.ws.append(["TIME", "R1", "R2", "T1", "T2"])
 
+        self.current_version = "1.0"  # Текущая версия
+
+        # Создание вкладок
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
 
+        # Главный экран
         self.main_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.main_frame, text="Главный экран")
 
+        # Панель с разделителем
         self.paned_window = tk.PanedWindow(self.main_frame, orient=tk.HORIZONTAL, sashrelief=tk.RAISED, sashwidth=15)
         self.paned_window.pack(fill=tk.BOTH, expand=True)
 
+        # Фрейм для отображения данных
         self.data_frame = tk.Frame(self.paned_window)
         self.paned_window.add(self.data_frame, minsize=400)
 
@@ -44,6 +52,7 @@ class TermexApp:
         self.data_display = tk.Text(self.data_frame, state='disabled', height=10, width=70, font=("Helvetica", self.font_size))
         self.data_display.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=30, pady=5)
 
+        # Фрейм для выбора COM-порта
         self.port_frame = tk.Frame(self.paned_window)
         self.paned_window.add(self.port_frame, minsize=200)
 
@@ -58,6 +67,7 @@ class TermexApp:
         self.scrollbar.place(x=1, y=5, relheight=1.0)
         self.data_display.config(yscrollcommand=self.scrollbar.set)
 
+        # Фрейм для кнопок
         self.button_frame = ttk.Frame(self.main_frame)
         self.button_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
 
@@ -77,6 +87,7 @@ class TermexApp:
         self.update_port_button = ttk.Button(self.button_frame, text="Обновить порты", command=self.update_port_list, style="TButton")
         self.update_port_button.pack(side=tk.LEFT, padx=5)
 
+        # Фрейм для графика
         self.plot_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.plot_frame, text="График")
 
@@ -121,6 +132,7 @@ class TermexApp:
 
         self.open_plot_window()
 
+        # Фрейм для настроек
         self.setting_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.setting_frame, text="Настройки")
 
@@ -200,6 +212,11 @@ class TermexApp:
         self.recording_indicator.pack(side=tk.BOTTOM, anchor='e', padx=10, pady=10)
         self.recording_indicator.pack_forget()
 
+        # Кнопка для проверки обновлений
+        self.check_update_button = ttk.Button(self.setting_frame, text="Проверить обновление", command=self.check_for_updates, style="TButton")
+        self.check_update_button.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
+
+        # Фрейм для помощи
         self.help_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.help_frame, text="Помощь")
 
@@ -283,7 +300,8 @@ class TermexApp:
                 "show_t1": "Показать T1",
                 "show_t2": "Показать T2",
                 "clear_plot_button": "Очистить график",
-                "update_plot_button": "Обновить график"
+                "update_plot_button": "Обновить график",
+                "check_update_button": "Проверить обновление"
             },
             "En": {
                 "title": "TERKON",
@@ -353,7 +371,8 @@ class TermexApp:
                 "show_t1": "Show T1",
                 "show_t2": "Show T2",
                 "clear_plot_button": "Clear Plot",
-                "update_plot_button": "Update Plot"
+                "update_plot_button": "Update Plot",
+                "check_update_button": "Check for Updates"
             }
         }
 
@@ -364,7 +383,15 @@ class TermexApp:
         self.write_thread = None
         self.write_thread_running = False
 
+        # Привязка клавиатурных событий
+        self.root.bind("<Up>", self.focus_previous)
+        self.root.bind("<Down>", self.focus_next)
+        self.root.bind("<Left>", self.focus_previous_tab)
+        self.root.bind("<Right>", self.focus_next_tab)
+        self.root.bind("<Return>", self.activate_focused_widget)
+
     def change_language(self, *args):
+        # Этот участок кода выполняет смену языка интерфейса
         language = self.language_var.get()
         translations = self.translations[language]
 
@@ -406,17 +433,21 @@ class TermexApp:
 
         self.clear_plot_button.config(text=translations["clear_plot_button"])
         self.update_plot_button.config(text=translations["update_plot_button"])
+        self.check_update_button.config(text=translations["check_update_button"])
 
     def adjust_entry_width(self, event):
+        # Этот участок кода выполняет изменение ширины поля ввода в зависимости от длины текста
         entry = event.widget
         text_length = len(entry.get())
         entry.config(width=text_length + 2)
 
     def check_developer_code(self, event):
+        # Этот участок кода выполняет проверку кода разработчика
         if self.a1_entry.get() == "HELLO_WORLD":
             self.show_developer_settings()
 
     def show_developer_settings(self):
+        # Этот участок кода выполняет отображение настроек разработчика
         if not hasattr(self, 'developer_frame'):
             self.developer_frame = ttk.Frame(self.notebook)
             self.notebook.add(self.developer_frame, text="Настройки разработчика")
@@ -439,22 +470,26 @@ class TermexApp:
             self.exit_developer_button.pack(anchor="w", padx=10, pady=10)
 
     def hide_developer_settings(self):
+        # Этот участок кода выполняет скрытие настроек разработчика
         if hasattr(self, 'developer_frame'):
             self.notebook.forget(self.developer_frame)
             del self.developer_frame
 
     def update_plot_thread(self):
+        # Этот участок кода выполняет обновление графика в отдельном потоке
         while self.serial_port and self.serial_port.is_open:
             self.update_plot()
             time.sleep(0.1)
 
     def update_port_list(self):
+        # Этот участок кода выполняет обновление списка COM-портов
         self.port_listbox.delete(0, tk.END)
         ports = serial.tools.list_ports.comports()
         for port in ports:
             self.port_listbox.insert(tk.END, port.device)
 
     def connect_to_device(self, event):
+        # Этот участок кода выполняет подключение к устройству через COM-порт
         if self.serial_port and self.serial_port.is_open:
             if messagebox.askokcancel("Подтверждение", "Все данные на графике будут удалены. Продолжить?"):
                 self.connecting_to_new_port = True
@@ -489,6 +524,7 @@ class TermexApp:
             messagebox.showerror("Ошибка", "Ошибка подключения: " + str(e))
 
     def disconnect_from_device(self):
+        # Этот участок кода выполняет отключение от устройства
         if self.serial_port and self.serial_port.is_open:
             self.serial_port.close()
             self.data_display.config(state='normal')
@@ -505,6 +541,7 @@ class TermexApp:
                 self.connecting_to_new_port = False
 
     def clear_data(self):
+        # Этот участок кода выполняет очистку данных
         self.data_r1 = []
         self.data_r2 = []
         self.data_t1 = []
@@ -519,6 +556,7 @@ class TermexApp:
         self.values_t2 = []
 
     def clear_plot(self):
+        # Этот участок кода выполняет очистку графика
         if messagebox.askokcancel("Подтверждение", "Все данные на графике будут удалены. Продолжить?"):
             self.ax.clear()
             self.ax.set_xlabel('Время (секунды)', fontsize=self.font_size)
@@ -533,6 +571,7 @@ class TermexApp:
             self.canvas.draw()
 
     def read_data(self):
+        # Этот участок кода выполняет чтение данных с устройства
         self.serial_port.dtr = True
         self.serial_port.rts = False
 
@@ -625,6 +664,7 @@ class TermexApp:
             time.sleep(0.1)
 
     def check_data_count(self):
+        # Этот участок кода выполняет проверку количества данных для отображения на графике
         if len(self.data_r1) + len(self.data_r2) + len(self.data_t1) + len(self.data_t2) > 250:
             if not self.notification_shown:
                 messagebox.showinfo("Информация",
@@ -638,6 +678,7 @@ class TermexApp:
         self.data_count_checked = False
 
     def update_plot(self):
+        # Этот участок кода выполняет обновление графика
         if self.stop_auto_update:
             return
 
@@ -712,12 +753,14 @@ class TermexApp:
         self.canvas.draw()
 
     def update_data_display(self, data):
+        # Этот участок кода выполняет обновление отображения данных
         self.data_display.config(state='normal')
         self.data_display.insert(tk.END, data + "\n")
         self.data_display.config(state='disabled')
         self.data_display.see(tk.END)
 
     def write_to_file(self):
+        # Этот участок кода выполняет запись данных в файл
         while self.write_thread_running:
             try:
                 data = self.data_queue.get()
@@ -765,11 +808,13 @@ class TermexApp:
                 messagebox.showerror("Ошибка", f"Ошибка записи данных в файл: {str(e)}")
 
     def create_file(self):
+        # Этот участок кода выполняет создание файла для сохранения данных
         self.file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
         if self.file_path:
             messagebox.showinfo("Информация", f"Файл для сохранения данных создан: {self.file_path}")
 
     def start_recording(self):
+        # Этот участок кода выполняет начало записи данных
         if not self.file_path:
             messagebox.showerror("Ошибка", "Сначала создайте файл для сохранения данных.")
             return
@@ -787,6 +832,7 @@ class TermexApp:
             self.write_thread.start()
 
     def stop_recording(self):
+        # Этот участок кода выполняет остановку записи данных
         if not self.file_path:
             messagebox.showerror("Ошибка", "Сначала создайте файл для сохранения данных.")
             return
@@ -802,6 +848,7 @@ class TermexApp:
                 self.write_thread.join(timeout=1)
 
     def open_plot_window(self):
+        # Этот участок кода выполняет открытие окна с графиком
         self.fig, self.ax = plt.subplots()
         self.ax.set_xlabel('Время (секунды)', fontsize=self.font_size)
         self.ax.set_ylabel('Значение', fontsize=self.font_size)
@@ -840,6 +887,7 @@ class TermexApp:
         self.update_plot_button.config(state='disabled')
 
     def on_mouse_wheel(self, event):
+        # Этот участок кода выполняет масштабирование графика при прокрутке колеса мыши
         current_xlim = self.ax.get_xlim()
         current_ylim = self.ax.get_ylim()
         scale_factor = 1.1 if event.button == 'up' else 0.9
@@ -851,14 +899,17 @@ class TermexApp:
         self.canvas.draw()
 
     def on_mouse_move(self, event):
+        # Этот участок кода выполняет обновление координат курсора на графике
         if event.inaxes:
             x, y = event.xdata, event.ydata
             self.update_cursor_label(x, y)
 
     def update_cursor_label(self, x, y):
+        # Этот участок кода выполняет обновление метки курсора на графике
         self.cursor_label.config(text=f"X: {x:.2f}, Y: {y:.2f}")
 
     def save_settings(self):
+        # Этот участок кода выполняет сохранение настроек
         try:
             a1_value = self.a1_entry.get().strip()
             b1_value = self.b1_entry.get().strip()
@@ -882,6 +933,7 @@ class TermexApp:
             messagebox.showerror("Ошибка", f"Неверный формат данных. {str(e)}")
 
     def reset_settings(self):
+        # Этот участок кода выполняет сброс настроек к значениям по умолчанию
         self.a1_entry.delete(0, tk.END)
         self.a1_entry.insert(0, "3.96868e-3")
         self.b1_entry.delete(0, tk.END)
@@ -897,11 +949,13 @@ class TermexApp:
         messagebox.showinfo("Информация", "Значения сброшены к значениям по умолчанию.")
 
     def calculate_temperature(self, R, a, b, scale):
+        # Этот участок кода выполняет расчет температуры
         if not isinstance(R, (int, float)) or not isinstance(a, (int, float)) or not isinstance(b, (int, float)) or not isinstance(scale, (int, float)):
             raise ValueError("Все параметры должны быть числовыми значениями.")
         return (-a + (a**2 - 4 * b * (1 - R / scale))**0.5) / (2 * b)
 
     def update_temperature_label(self, t1=None, t2=None):
+        # Этот участок кода выполняет обновление метки температуры
         current_t1 = self.temperature_label.cget("text").split("T1: ")[1].split(", T2: ")[0]
         current_t2 = self.temperature_label.cget("text").split("T2: ")[1]
 
@@ -913,6 +967,7 @@ class TermexApp:
         self.temperature_label.config(text=f"T1: {current_t1}, T2: {current_t2}")
 
     class ConsoleRedirector:
+        # Этот класс выполняет перенаправление вывода консоли в текстовое поле
         def __init__(self, text_widget):
             self.text_widget = text_widget
 
@@ -926,18 +981,103 @@ class TermexApp:
             pass
 
     def blink_indicator(self):
+        # Этот участок кода выполняет мигание индикатора записи
         if self.is_recording:
             self.recording_indicator.config(fg="red" if self.recording_indicator.cget("fg") == "gray" else "gray")
             self.root.after(500, self.blink_indicator)
 
     def show_error_message(self, message):
+        # Этот участок кода выполняет отображение сообщения об ошибке
         messagebox.showerror("Ошибка", message)
+
+    def focus_previous(self, event):
+        # Этот участок кода выполняет переход фокуса на предыдущий элемент
+        self.root.event_generate("<Tab>")
+
+    def focus_next(self, event):
+        # Этот участок кода выполняет переход фокуса на следующий элемент
+        self.root.event_generate("<Shift-Tab>")
+
+    def focus_previous_tab(self, event):
+        # Этот участок кода выполняет переход на предыдущую вкладку
+        current_tab = self.notebook.index(self.notebook.select())
+        if current_tab > 0:
+            self.notebook.select(current_tab - 1)
+
+    def focus_next_tab(self, event):
+        # Этот участок кода выполняет переход на следующую вкладку
+        current_tab = self.notebook.index(self.notebook.select())
+        if current_tab < self.notebook.index(tk.END) - 1:
+            self.notebook.select(current_tab + 1)
+
+    def activate_focused_widget(self, event):
+        # Этот участок кода выполняет активацию фокусированного виджета
+        focused_widget = self.root.focus_get()
+        if isinstance(focused_widget, ttk.Button):
+            focused_widget.invoke()
+
+    def check_for_updates(self):
+        # Этот участок кода выполняет проверку обновлений
+        threading.Thread(target=self.perform_update_check).start()
+
+    def perform_update_check(self):
+        # Этот участок кода выполняет проверку обновлений в отдельном потоке
+        update_available, download_url = check_for_updates(self.current_version)
+        if update_available:
+            self.show_update_notification(download_url)
+
+    def show_update_notification(self, download_url):
+        # Этот участок кода выполняет отображение уведомления об обновлении
+        if messagebox.askyesno("Обновление доступно", "Доступна новая версия. Хотите обновить?"):
+            download_path = "path/to/installer.exe"
+            if download_update(download_url, download_path):
+                install_update(download_path)
+
+def check_for_updates(current_version):
+    # Этот участок кода выполняет проверку наличия новых версий на GitHub
+    url = "https://github.com/ElMakgit/Terkon/pythonProject/version.json"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        latest_version_info = response.json()
+        latest_version = latest_version_info.get("version")
+        download_url = latest_version_info.get("download_url")
+
+        if latest_version > current_version:
+            return True, download_url
+        else:
+            return False, None
+    except requests.RequestException as e:
+        print(f"Error checking for updates: {e}")
+        return False, None
+
+def download_update(download_url, download_path):
+    # Этот участок кода выполняет скачивание новой версии с GitHub
+    try:
+        response = requests.get(download_url, stream=True)
+        response.raise_for_status()
+        with open(download_path, 'wb') as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+        return True
+    except requests.RequestException as e:
+        print(f"Error downloading update: {e}")
+        return False
+
+def install_update(installer_path):
+    # Этот участок кода выполняет установку новой версии
+    try:
+        subprocess.Popen([sys.executable, installer_path])
+        sys.exit()
+    except Exception as e:
+        print(f"Error installing update: {e}")
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = TermexApp(root)
 
     def on_closing():
+        # Этот участок кода выполняет закрытие приложения
         if messagebox.askokcancel("Выход", "Закрыть программу?"):
             if app.serial_port and app.serial_port.is_open:
                 app.serial_port.close()
