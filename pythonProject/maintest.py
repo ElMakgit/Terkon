@@ -10,8 +10,6 @@ from openpyxl import Workbook
 import sys
 import queue
 from datetime import datetime
-import requests
-import subprocess
 
 class TermexApp:
     def __init__(self, root):
@@ -211,10 +209,6 @@ class TermexApp:
         self.recording_indicator = tk.Label(self.main_frame, text="●", font=("Helvetica", self.font_size), fg="red")
         self.recording_indicator.pack(side=tk.BOTTOM, anchor='e', padx=10, pady=10)
         self.recording_indicator.pack_forget()
-
-        # Кнопка для проверки обновлений
-        self.check_update_button = ttk.Button(self.setting_frame, text="Проверить обновление", command=self.check_for_updates, style="TButton")
-        self.check_update_button.pack(side=tk.TOP, anchor='w', padx=10, pady=10)
 
         # Фрейм для помощи
         self.help_frame = ttk.Frame(self.notebook)
@@ -433,7 +427,6 @@ class TermexApp:
 
         self.clear_plot_button.config(text=translations["clear_plot_button"])
         self.update_plot_button.config(text=translations["update_plot_button"])
-        self.check_update_button.config(text=translations["check_update_button"])
 
     def adjust_entry_width(self, event):
         # Этот участок кода выполняет изменение ширины поля ввода в зависимости от длины текста
@@ -1016,77 +1009,21 @@ class TermexApp:
         if isinstance(focused_widget, ttk.Button):
             focused_widget.invoke()
 
-    def check_for_updates(self):
-        # Этот участок кода выполняет проверку обновлений
-        threading.Thread(target=self.perform_update_check).start()
-
-    def perform_update_check(self):
-        # Этот участок кода выполняет проверку обновлений в отдельном потоке
-        update_available, download_url = check_for_updates(self.current_version)
-        if update_available:
-            self.show_update_notification(download_url)
-
-    def show_update_notification(self, download_url):
-        # Этот участок кода выполняет отображение уведомления об обновлении
-        if messagebox.askyesno("Обновление доступно", "Доступна новая версия. Хотите обновить?"):
-            download_path = "path/to/installer.exe"
-            if download_update(download_url, download_path):
-                install_update(download_path)
-
-def check_for_updates(current_version):
-    # Этот участок кода выполняет проверку наличия новых версий на GitHub
-    url = "https://github.com/ElMakgit/Terkon/blob/main/pythonProject/version.json"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        latest_version_info = response.json()
-        latest_version = latest_version_info.get("version")
-        download_url = latest_version_info.get("download_url")
-
-        if latest_version > current_version:
-            return True, download_url
-        else:
-            return False, None
-    except requests.RequestException as e:
-        print(f"Error checking for updates: {e}")
-        return False, None
-
-def download_update(download_url, download_path):
-    # Этот участок кода выполняет скачивание новой версии с GitHub
-    try:
-        response = requests.get(download_url, stream=True)
-        response.raise_for_status()
-        with open(download_path, 'wb') as file:
-            for chunk in response.iter_content(chunk_size=8192):
-                file.write(chunk)
-        return True
-    except requests.RequestException as e:
-        print(f"Error downloading update: {e}")
-        return False
-
-def install_update(installer_path):
-    # Этот участок кода выполняет установку новой версии
-    try:
-        subprocess.Popen([sys.executable, installer_path])
-        sys.exit()
-    except Exception as e:
-        print(f"Error installing update: {e}")
-
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = TermexApp(root)
+        root = tk.Tk()
+        app = TermexApp(root)
 
-    def on_closing():
-        # Этот участок кода выполняет закрытие приложения
-        if messagebox.askokcancel("Выход", "Закрыть программу?"):
-            if app.serial_port and app.serial_port.is_open:
-                app.serial_port.close()
-            if app.read_data_thread and app.read_data_thread.is_alive():
-                app.read_data_thread.join(timeout=1)
-            if app.update_plot_thread and app.update_plot_thread.is_alive():
-                app.update_plot_thread.join(timeout=1)
-            root.destroy()
-            sys.exit()
+        def on_closing():
+            # Этот участок кода выполняет закрытие приложения
+            if messagebox.askokcancel("Выход", "Закрыть программу?"):
+                if app.serial_port and app.serial_port.is_open:
+                    app.serial_port.close()
+                if app.read_data_thread and app.read_data_thread.is_alive():
+                    app.read_data_thread.join(timeout=1)
+                if app.update_plot_thread and app.update_plot_thread.is_alive():
+                    app.update_plot_thread.join(timeout=1)
+                root.destroy()
+                sys.exit()
 
-    root.protocol("WM_DELETE_WINDOW", on_closing)
-    root.mainloop()
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+        root.mainloop()
